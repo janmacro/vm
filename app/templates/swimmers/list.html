@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid gap-6 md:grid-cols-2">
+  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <h3 class="text-base font-semibold text-slate-800">Women</h3>
+      <span class="text-sm font-medium tracking-wide text-slate-400">{{ female_swimmers|length }} total</span>
+      <a
+        class="rounded bg-pink-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-pink-700"
+        href="{{ url_for('swimmers.new', gender='f') }}"
+      >
+        Add
+      </a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+        {% if female_swimmers %}
+          <thead class="bg-slate-50 text-sm text-slate-500">
+            <tr>
+              <th scope="col" class="px-4 py-3 font-semibold">Name</th>
+              <th scope="col" class="px-4 py-3 font-semibold">PBs</th>
+              <th scope="col" class="px-4"></th>
+            </tr>
+          </thead>
+        {% endif %}
+        <tbody class="divide-y divide-slate-100">
+          {% for swimmer in female_swimmers %}
+            {% include "swimmers/_row.html" with context %}
+          {% else %}
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-sm text-slate-500">No swimmers yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <h3 class="text-base font-semibold text-slate-800">Men</h3>
+      <span class="text-sm font-medium tracking-wide text-slate-400">{{ male_swimmers|length }} total</span>
+      <a
+        class="rounded bg-sky-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-sky-700"
+        href="{{ url_for('swimmers.new', gender='m') }}"
+      >
+        Add
+      </a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+        {% if male_swimmers %}
+          <thead class="bg-slate-50 text-sm text-slate-500">
+            <tr>
+              <th scope="col" class="px-4 py-3 font-semibold">Name</th>
+              <th scope="col" class="px-4 py-3 font-semibold">PBs</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-right"></th>
+            </tr>
+          </thead>
+        {% endif %}
+        <tbody class="divide-y divide-slate-100">
+          {% for swimmer in male_swimmers %}
+            {% include "swimmers/_row.html" with context %}
+          {% else %}
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-sm text-slate-500">No swimmers yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

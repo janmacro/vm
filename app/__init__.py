@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
-from flask import Flask
+from flask import Flask, redirect, url_for
 
 
 def create_app(config: Mapping[str, Any] | None = None) -> Flask:
@@ -26,26 +26,17 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
     os.makedirs(app.instance_path, exist_ok=True)
 
     # --- Database setup ---
-    # The db module will provide: init_app(app), and a CLI command to init schema.
     from . import db
     db.init_app(app)
 
-    # --- Blueprint registration (files we’ll add next) ---
-    # Keep imports inside the factory to avoid circular imports during tests.
-    # from .routes import swimmers
-    # from .routes import pbs
-    # from .routes import optimize
-    # from .routes import importer
+    # --- Blueprint registration ---
+    from .routes import swimmers, optimize
 
-    # app.register_blueprint(swimmers.bp, url_prefix="/swimmers")
-    # app.register_blueprint(pbs.bp, url_prefix="/pbs")
-    # app.register_blueprint(optimize.bp, url_prefix="/optimize")
-    # app.register_blueprint(importer.bp, url_prefix="/import")
+    app.register_blueprint(swimmers.bp)
+    app.register_blueprint(optimize.bp)
 
-    # # Root route convenience: send users to swimmers list first
-    # @app.get("/")
-    # def index():
-    #     from flask import redirect, url_for
-    #     return redirect(url_for("swimmers.index"))
+    @app.get("/")
+    def index():
+        return redirect(url_for("swimmers.index"))
 
     return app

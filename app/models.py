@@ -1,10 +1,8 @@
-from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Tuple
 
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 
 from .db import db
 
@@ -25,7 +23,6 @@ class Event(Enum):
     FL_50 = "50m Fly"
     FL_100 = "100m Fly"
     FL_200 = "200m Fly"
-    IM_50 = "50m Medley"
     IM_100 = "100m Medley"
     IM_200 = "200m Medley"
     IM_400 = "400m Medley"

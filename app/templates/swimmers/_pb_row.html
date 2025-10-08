@@ -1,0 +1,22 @@
+<tr>
+  <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-800">{{ event.value }}</td>
+  <td class="px-4 py-3">
+    <input
+      type="number"
+      min="0"
+      name="points_{{ event.name }}"
+      value="{{ values.points }}"
+      class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      placeholder="e.g. 700"
+    >
+  </td>
+  <td class="px-4 py-3">
+    <input
+      type="text"
+      name="time_{{ event.name }}"
+      value="{{ values.time }}"
+      class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      placeholder="mm:ss.ss"
+    >
+  </td>
+</tr>
