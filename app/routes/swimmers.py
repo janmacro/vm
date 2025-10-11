@@ -4,6 +4,7 @@ from typing import Any, Dict
 from flask import (
     Blueprint,
     abort,
+    make_response,
     redirect,
     render_template,
     request,
@@ -359,12 +360,8 @@ def delete(swimmer_id: int) -> Any:
     db.session.commit()
 
     if _is_htmx(request):
-        return ("", 204)
+        response = make_response("", 204)
+        response.headers["HX-Redirect"] = url_for("swimmers.index")
+        return response
 
     return redirect(url_for("swimmers.index"))
-
-
-@bp.post("/<int:swimmer_id>/delete")
-def delete_via_post(swimmer_id: int) -> Any:
-    """Fallback for browsers without DELETE support."""
-    return delete(swimmer_id)
