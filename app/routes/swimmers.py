@@ -14,7 +14,7 @@ from sqlalchemy import select
 from ..db import db
 from ..models import Event, PB, Swimmer
 from ..services import swimrankings
-from ..services.pb_utils import parse_time_to_seconds, format_seconds_to_time
+import re
 
 bp = Blueprint("swimmers", __name__, url_prefix="/swimmers")
 
@@ -52,6 +52,62 @@ def _coerce_int(value: str) -> int | None:
         return int(value)
     except ValueError as exc:
         raise ValueError(f"Invalid points value: {value}") from exc
+
+
+_MINUTE_PATTERN = re.compile(r"^(\d+):([0-5]\d)\.(\d{2})$")
+_SECOND_PATTERN = re.compile(r"^(\d+)\.(\d{2})$")
+
+
+def parse_time_to_seconds(value: str | None) -> float | None:
+    """Convert a time string into seconds or return None for blank input.
+
+    Accepted formats: ``ss.ss`` or ``m:ss.ss`` (seconds always two digits).
+    """
+
+    if not value:
+        return None
+
+    raw = value.strip()
+    if not raw:
+        return None
+
+    match = _MINUTE_PATTERN.match(raw)
+    if match:
+        minutes = int(match.group(1))
+        seconds = int(match.group(2))
+        hundredths = int(match.group(3))
+        if seconds >= 60:
+            raise ValueError(f"Invalid time format: {value}")
+        return minutes * 60 + seconds + hundredths / 100
+
+    match = _SECOND_PATTERN.match(raw)
+    if match:
+        seconds = int(match.group(1))
+        hundredths = int(match.group(2))
+        return seconds + hundredths / 100
+
+    raise ValueError(f"Invalid time format: {value}")
+
+
+def format_seconds_to_time(seconds: float | None) -> str:
+    """Return a canonical time string with hundredths (``m:ss.ss`` or ``ss.ss``)."""
+
+    if seconds is None:
+        return ""
+
+    total = max(0.0, float(seconds))
+    total = round(total, 2)
+    minutes = int(total // 60)
+    remainder = round(total - minutes * 60, 2)
+
+    # Handle rounding that bumps remainder to 60.00
+    if remainder >= 60:
+        minutes += 1
+        remainder -= 60
+
+    if minutes:
+        return f"{minutes}:{remainder:05.2f}"
+    return f"{remainder:.2f}"
 
 
 def _build_form_from_swimmer(swimmer: Swimmer, events: list[Event]) -> Dict[str, Dict[str, str]]:
@@ -104,6 +160,7 @@ def new(gender: str):
     form_pbs = _empty_pb_form(events)
     name_value = ""
     swimrankings_identifier = ""
+    pbest_season = "all"
     errors: list[str] = []
     messages: list[str] = []
 
@@ -111,14 +168,19 @@ def new(gender: str):
         action = request.form.get("action", "create")
         name_value = request.form.get("name", "").strip()
         swimrankings_identifier = request.form.get("swimrankings_identifier", "").strip()
+        pbest_season = request.form.get("pbest_season", "all").strip()
         form_pbs = _extract_pb_inputs(events, request.form)
 
         if action == "import":
             if not swimrankings_identifier:
-                errors.append("Provide a Swimrankings athlete URL or ID before importing.")
+                errors.append("Provide a Swimrankings athlete URL before importing.")
             else:
                 try:
-                    imported = swimrankings.fetch_personal_bests(swimrankings_identifier)
+                    imported = swimrankings.fetch_personal_bests(
+                        swimrankings_identifier,
+                        gender_normalized,
+                        None if pbest_season == "all" else pbest_season,
+                    )
                 except swimrankings.SwimrankingsError as exc:
                     errors.append(str(exc))
                 else:
@@ -131,9 +193,8 @@ def new(gender: str):
         else:
             if not name_value:
                 errors.append("Name is required.")
-
-            pb_objects: list[PB] = []
             if not errors:
+                pb_objects: list[PB] = []
                 swimmer = Swimmer(name=name_value, gender=gender_normalized)
                 db.session.add(swimmer)
                 db.session.flush()
@@ -179,6 +240,7 @@ def new(gender: str):
         form_pbs=form_pbs,
         events=events,
         swimrankings_identifier=swimrankings_identifier,
+        pbest_season=pbest_season,
         errors=errors,
         messages=messages,
     )
@@ -198,6 +260,7 @@ def edit(swimmer_id: int):
     form_pbs = _build_form_from_swimmer(swimmer, events)
     form_name = swimmer.name
     swimrankings_identifier = ""
+    pbest_season = "all"
     errors: list[str] = []
     messages: list[str] = []
 
@@ -205,6 +268,7 @@ def edit(swimmer_id: int):
         action = request.form.get("action", "save")
         form_name = request.form.get("name", form_name).strip()
         swimrankings_identifier = request.form.get("swimrankings_identifier", "").strip()
+        pbest_season = request.form.get("pbest_season", "all").strip()
         form_pbs = _extract_pb_inputs(events, request.form)
 
         if action == "import":
@@ -212,7 +276,11 @@ def edit(swimmer_id: int):
                 errors.append("Provide a Swimrankings athlete URL or ID before importing.")
             else:
                 try:
-                    imported = swimrankings.fetch_personal_bests(swimrankings_identifier)
+                    imported = swimrankings.fetch_personal_bests(
+                        swimrankings_identifier,
+                        swimmer.gender,
+                        None if pbest_season == "all" else pbest_season,
+                    )
                 except swimrankings.SwimrankingsError as exc:
                     errors.append(str(exc))
                 else:
@@ -278,6 +346,7 @@ def edit(swimmer_id: int):
         form_pbs=form_pbs,
         form_name=form_name,
         swimrankings_identifier=swimrankings_identifier,
+        pbest_season=pbest_season,
         errors=errors,
         messages=messages,
     )

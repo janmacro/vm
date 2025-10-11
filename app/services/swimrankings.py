@@ -1,7 +1,6 @@
 """Utilities for importing personal bests from swimrankings.net."""
 from __future__ import annotations
 
-import re
 from typing import Dict
 from urllib.parse import parse_qs, urlparse
 
@@ -34,13 +33,7 @@ def _build_event_lookup() -> Dict[str, Event]:
             lookup[_normalize_label(base.replace("breast", "breaststroke"))] = event
         if "fly" in base:
             lookup[_normalize_label(base.replace("fly", "butterfly"))] = event
-        if "medley" in base:
-            lookup[_normalize_label(base.replace("medley", "individual medley"))] = event
-            lookup[_normalize_label(base.replace("medley", "im"))] = event
-            lookup[_normalize_label(base.replace("medley", "i.m."))] = event
-        # Allow shorthand like "50m IM"
-        if " medley" in base:
-            lookup[_normalize_label(base.replace(" medley", " im"))] = event
+        # "Medley" already matches Swimrankings values; no extra aliases needed.
     return lookup
 
 
@@ -52,42 +45,71 @@ def _map_event(label: str) -> Event | None:
     return _EVENT_LOOKUP.get(normalized)
 
 
-def _extract_athlete_id(identifier: str) -> str:
-    candidate = identifier.strip()
+def _extract_athlete_id(url: str) -> str:
+    candidate = url.strip()
     if not candidate:
-        raise SwimrankingsError("Swimrankings identifier is required.")
+        raise SwimrankingsError("Swimrankings URL is required.")
 
-    # Direct numeric ID
-    if candidate.isdigit():
-        return candidate
-
-    # Try to parse from URL query string
     parsed = urlparse(candidate)
-    if parsed.query:
-        qs = parse_qs(parsed.query)
-        athlete_ids = qs.get("athleteId")
-        if athlete_ids:
-            return athlete_ids[0]
+    if parsed.netloc != "www.swimrankings.net" or parsed.path != "/index.php":
+        raise SwimrankingsError("Only swimrankings athlete detail URLs are supported.")
 
-    # Last attempt: search for numbers in the string
-    match = re.search(r"(\d{4,})", candidate)
-    if match:
-        return match.group(1)
+    qs = parse_qs(parsed.query)
+    if qs.get("page", [None])[0] != "athleteDetail":
+        raise SwimrankingsError("URL must include page=athleteDetail.")
 
-    raise SwimrankingsError("Could not determine athlete ID from input.")
+    athlete_ids = qs.get("athleteId")
+    if not athlete_ids or not athlete_ids[0].isdigit():
+        raise SwimrankingsError("URL must include a numeric athleteId parameter.")
+
+    return athlete_ids[0]
 
 
-def fetch_personal_bests(identifier: str) -> Dict[Event, Dict[str, str]]:
+def _extract_gender(soup) -> str:
+    icon = soup.find("img", src=lambda s: s and "images/gender" in s)
+    if not icon or not icon.get("src"):
+        raise SwimrankingsError("Unable to determine swimmer gender from Swimrankings page.")
+    src = icon["src"].lower()
+    if "gender1" in src:
+        return "m"
+    if "gender" in src:
+        return "f"
+    raise SwimrankingsError("Unknown gender icon on Swimrankings page.")
+
+
+def _select_pb_table(soup) -> tuple:
+    for table in soup.find_all("table"):
+        header_cells = table.find_all("th")
+        if not header_cells:
+            continue
+        headers = [cell.get_text(strip=True) for cell in header_cells]
+        if any("Pts" in h for h in headers) and any("Event" in h for h in headers):
+            return table, headers
+    raise SwimrankingsError("Personal bests table missing from Swimrankings page.")
+
+
+_ALLOWED_PBEST_SEASONS = {"2025", "2026"}
+
+
+def fetch_personal_bests(
+    identifier: str,
+    expected_gender: str,
+    season: str | None = None,
+) -> Dict[Event, Dict[str, str]]:
     """Fetch personal bests from swimrankings.net.
 
     Returns a mapping of Event -> {"points": str, "time": str, "course": str}.
-    Prefers 50m course when multiple options exist.
     """
     athlete_id = _extract_athlete_id(identifier)
+    if season is not None and season not in _ALLOWED_PBEST_SEASONS:
+        raise SwimrankingsError("Unsupported Swimrankings season filter.")
+
     url = (
         "https://www.swimrankings.net/index.php?page=athleteDetail"
         f"&athleteId={athlete_id}&language=us"
     )
+    if season:
+        url += f"&pbest={season}"
 
     try:
         response = httpx.get(url, timeout=15.0)
@@ -97,16 +119,35 @@ def fetch_personal_bests(identifier: str) -> Dict[Event, Dict[str, str]]:
 
     soup = BeautifulSoup(response.text, "html.parser")
 
+    page_gender = _extract_gender(soup)
+    if page_gender != expected_gender:
+        raise SwimrankingsError("Swimmer gender on Swimrankings page does not match the roster entry.")
+
     heading = soup.find(lambda tag: tag.name in {"h2", "b"} and "Personal bests" in tag.get_text())
     if heading is None:
         raise SwimrankingsError("Personal bests section not found on Swimrankings page.")
 
-    table = heading.find_next("table")
-    if table is None:
-        raise SwimrankingsError("Personal bests table missing from Swimrankings page.")
+    table, headers = _select_pb_table(soup)
+
+    header_map = {header: idx for idx, header in enumerate(headers)}
+
+    def _find_index(name: str) -> int | None:
+        for header, idx in header_map.items():
+            normalized = header.lower()
+            if name in normalized:
+                return idx
+        return None
+
+    event_idx = _find_index("event")
+    points_idx = _find_index("pts")
+    time_idx = _find_index("time")
+    course_idx = _find_index("course")
+
+    if event_idx is None or points_idx is None or time_idx is None:
+        raise SwimrankingsError("Personal bests table is missing required columns.")
 
     results: Dict[Event, Dict[str, str]] = {}
-    preferred_course = "50m"
+    preferred_course = "25m"
 
     for row in table.find_all("tr"):
         # Skip header rows
@@ -114,24 +155,30 @@ def fetch_personal_bests(identifier: str) -> Dict[Event, Dict[str, str]]:
             continue
 
         cells = row.find_all("td")
-        if len(cells) < 3:
+        if not cells or len(cells) <= max(event_idx, points_idx, time_idx):
             continue
 
-        event_label = cells[0].get_text(strip=True)
+        event_label = cells[event_idx].get_text(strip=True)
         mapped_event = _map_event(event_label)
         if not mapped_event:
             continue
 
-        course_cell = row.select_one("td.course")
-        course = course_cell.get_text(strip=True) if course_cell else ""
+        course = ""
+        if course_idx is not None and len(cells) > course_idx:
+            course = cells[course_idx].get_text(strip=True)
 
-        time_anchor = row.select_one("a.time")
-        time_text = time_anchor.get_text(strip=True) if time_anchor else cells[2].get_text(strip=True)
+        time_cell = cells[time_idx]
+        time_anchor = time_cell.find("a", class_="time")
+        raw_time = time_anchor.get_text(strip=True) if time_anchor else time_cell.get_text(strip=True)
+        if raw_time and raw_time.endswith("M"):
+            raw_time = raw_time[:-1]
+        raw_time = raw_time.strip() if raw_time else ""
 
-        points_cell = row.select_one("td.code")
-        points_text = points_cell.get_text(strip=True) if points_cell else cells[-1].get_text(strip=True)
+        points_text = cells[points_idx].get_text(strip=True)
+        if not points_text:
+            continue
 
-        payload = {"points": points_text, "time": time_text, "course": course}
+        payload = {"points": points_text, "time": raw_time, "course": course}
         existing = results.get(mapped_event)
         if existing is None:
             results[mapped_event] = payload

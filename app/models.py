@@ -67,9 +67,6 @@ class PB(db.Model):
 
     points: Mapped[int] = mapped_column(db.Integer, nullable=False)
     time_seconds: Mapped[float | None] = mapped_column(db.Float, nullable=True)
-
-    # Used for swimrankings import
-    locked: Mapped[bool] = mapped_column(db.Boolean, nullable=False, default=False)
     
     def __repr__(self) -> str:
         return f"<PB swimmer_id={self.swimmer_id} event={self.event.name} points={self.points}>"

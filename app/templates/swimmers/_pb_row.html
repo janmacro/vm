@@ -1,5 +1,8 @@
+{% set clear_controls = clear_controls | default(false) %}
 <tr>
-  <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-800">{{ event.value }}</td>
+  <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-800">
+    {{ event.value }}
+  </td>
   <td class="px-4 py-3">
     <input
       type="number"
@@ -16,7 +19,17 @@
       name="time_{{ event.name }}"
       value="{{ values.time }}"
       class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-      placeholder="mm:ss.ss"
+      placeholder="m:ss.ss"
     >
   </td>
+  {% if clear_controls %}
+  <td class="px-4 py-3 text-right">
+    <button
+      type="button"
+      class="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 js-clear-row"
+    >
+      Clear
+    </button>
+  </td>
+  {% endif %}
 </tr>
