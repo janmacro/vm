@@ -1,6 +1,17 @@
-<tr id="swimmer-{{ swimmer.id }}" class="bg-white hover:bg-slate-50">
+<tr id="swimmer-{{ swimmer.id }}" class="bg-white hover:bg-slate-50 {% if not swimmer.active %}opacity-50{% endif %}">
   <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-800">{{ swimmer.name }}</td>
   <td class="px-4 py-3 text-sm text-slate-600">{{ swimmer.pbs|length }}</td>
+  <td class="px-4 py-3">
+    <input
+      type="checkbox"
+      class="rounded border border-slate-300 text-indigo-600 focus:ring-indigo-500"
+      {% if swimmer.active %}checked{% endif %}
+      hx-patch="{{ url_for('swimmers.toggle_active', swimmer_id=swimmer.id) }}"
+      hx-target="#swimmer-{{ swimmer.id }}"
+      hx-swap="outerHTML"
+      hx-trigger="change"
+    >
+  </td>
   <td class="px-4 py-3 text-right">
     <div class="flex justify-end gap-2">
       <a

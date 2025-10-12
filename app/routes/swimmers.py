@@ -353,6 +353,14 @@ def edit(swimmer_id: int):
     )
 
 
+@bp.patch("/<int:swimmer_id>/active")
+def toggle_active(swimmer_id: int):
+    swimmer = _get_swimmer_or_404(swimmer_id)
+    swimmer.active = not swimmer.active
+    db.session.commit()
+    return render_template("swimmers/_row.html", swimmer=swimmer)
+
+
 @bp.delete("/<int:swimmer_id>")
 def delete(swimmer_id: int) -> Any:
     swimmer = _get_swimmer_or_404(swimmer_id)
