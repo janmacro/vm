@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title or "VM Optimizer" }}</title>
+  <title>{{ title or "Vereinsmeisterschaft" }}</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script
     src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"
@@ -15,7 +15,7 @@
 <body class="min-h-screen bg-slate-100 text-slate-900">
   <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
     <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <h1 class="text-3xl font-semibold">🏊 VM Optimizer</h1>
+      <h1 class="text-3xl font-semibold">🏊 Vereinsmeisterschaft</h1>
       <nav class="flex items-center gap-2 text-sm font-medium text-slate-600">
         {% set current_endpoint = request.endpoint or '' %}
         <a

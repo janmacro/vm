@@ -3,22 +3,56 @@ from typing import Dict, List, Tuple
 
 from ..models import Event
 
-import time
-start_time = time.time()
 
-# 4 segments (two days, two blocks/day). Each item is a race *occurrence*.
-segments_vm_m: List[List[Event]] = [
-    [Event.FL_50, Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_400],
-    [Event.BR_200, Event.BK_100, Event.FL_200, Event.IM_400, Event.BK_50, Event.FR_1500, Event.FR_100],
-    [Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_50, Event.BR_200],
-    [Event.IM_100, Event.BK_100, Event.FL_200, Event.IM_400, Event.FR_400, Event.BR_50, Event.FR_100],
-]
+SEGMENT_CATALOG: Dict[tuple[str, str], List[List[Event]]] = {
+    ("m", "Allgemeine Kategorie"): [
+        [Event.FL_50, Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_400],
+        [Event.BR_200, Event.BK_100, Event.FL_200, Event.IM_400, Event.BK_50, Event.FR_1500, Event.FR_100],
+        [Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_50, Event.BR_200],
+        [Event.IM_100, Event.BK_100, Event.FL_200, Event.IM_400, Event.FR_400, Event.BR_50, Event.FR_100],
+    ],
+    ("f", "Allgemeine Kategorie"): [
+        [Event.FL_50, Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_400],
+        [Event.BR_200, Event.BK_100, Event.FL_200, Event.IM_400, Event.BK_50, Event.FR_800, Event.FR_100],
+        [Event.FR_200, Event.BR_100, Event.BK_200, Event.FL_100, Event.IM_200, Event.FR_50, Event.BR_200],
+        [Event.IM_100, Event.BK_100, Event.FL_200, Event.IM_400, Event.FR_400, Event.BR_50, Event.FR_100],
+    ],
+    ("m", "Nachwuchs"): [
+        [Event.IM_200, Event.FR_400, Event.BK_200, Event.IM_100, Event.FL_200, Event.BR_100, Event.FR_100, Event.IM_400],
+        [Event.FR_200, Event.BK_100, Event.IM_200, Event.FL_100, Event.BR_200, Event.FR_1500, Event.IM_100, Event.FR_50],
+    ],
+    ("f", "Nachwuchs"): [
+        [Event.IM_200, Event.FR_400, Event.BK_200, Event.IM_100, Event.FL_200, Event.BR_100, Event.FR_100, Event.IM_400],
+        [Event.FR_200, Event.BK_100, Event.IM_200, Event.FL_100, Event.BR_200, Event.FR_800, Event.IM_100, Event.FR_50],
+    ],
+}
+
+MAX_RACES_PER_SWIMMER: Dict[str, int] = {
+    "Allgemeine Kategorie": 5,
+    "Nachwuchs": 4,
+}
+
+
+def get_segments(gender: str, competition: str) -> List[List[Event]]:
+    """Return the segment definition for the given roster/competition."""
+
+    key = (gender.lower(), competition)
+    try:
+        return SEGMENT_CATALOG[key]
+    except KeyError as exc:
+        raise ValueError("Unsupported roster/competition combination.") from exc
+
+
+def get_max_races_per_swimmer(competition: str) -> int:
+    return MAX_RACES_PER_SWIMMER.get(competition)
 
 def enumerate_top_k_by_congestion(
     swimmers: List[int],
     points: Dict[Tuple[int, Event], float],
     segments: List[List[Event]],
     max_races_per_swimmer: int,
+    *,
+    enforce_adjacent_rest: bool = True,
     congestion_window_sizes: Tuple[int, ...] = (3, 4),
     congestion_weights: Dict[int, int] = None,
     top_k: int = 100,
@@ -46,13 +80,6 @@ def enumerate_top_k_by_congestion(
         seg_offsets[g] = running
         running += len(seg)
 
-    # Quick feasibility check
-    if max_races_per_swimmer * len(swimmers) < num_slots:
-        raise ValueError(
-            f"Infeasible: total slots={num_slots} exceed swimmers*max_races="
-            f"{len(swimmers)}*{max_races_per_swimmer}={len(swimmers)*max_races_per_swimmer}"
-        )
-
     # ---- PASS 1: maximize total points ----
     solver = pywraplp.Solver.CreateSolver("CBC")
     if not solver:
@@ -66,21 +93,22 @@ def enumerate_top_k_by_congestion(
         solver.Add(sum(x[(s, slot)] for s in swimmers) == 1)
     # 2) Per-swimmer max races
     for s in swimmers:
-        solver.Add(sum(x[(s, slot)] for (slot,_,_) in slots) <= max_races_per_swimmer)
+        solver.Add(sum(x[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
     # 3) No duplicate event per swimmer (across all segments)
     events_present = set(ev for *_, ev in slots)
     for s in swimmers:
         for ev in events_present:
             solver.Add(sum(x[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
     # 4) Hard rest: no back-to-back starts for same swimmer within a segment
-    for (slot, seg_idx, ev) in slots:
-        seg_len = len(segments[seg_idx])
-        base = seg_offsets[seg_idx]
-        local_pos = slot - base
-        if local_pos + 1 < seg_len:
-            next_slot = slot + 1
-            for s in swimmers:
-                solver.Add(x[(s, slot)] + x[(s, next_slot)] <= 1)
+    if enforce_adjacent_rest:
+        for (slot, seg_idx, ev) in slots:
+            seg_len = len(segments[seg_idx])
+            base = seg_offsets[seg_idx]
+            local_pos = slot - base
+            if local_pos + 1 < seg_len:
+                next_slot = slot + 1
+                for s in swimmers:
+                    solver.Add(x[(s, slot)] + x[(s, next_slot)] <= 1)
 
     # Objective: maximize total points
     total_points = solver.Sum(points.get((s, ev), 0) * x[(s, slot)]
@@ -108,14 +136,15 @@ def enumerate_top_k_by_congestion(
     for s in swimmers:
         for ev in events_present:
             solver2.Add(sum(x2[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
-    for (slot, seg_idx, ev) in slots:
-        seg_len = len(segments[seg_idx])
-        base = seg_offsets[seg_idx]
-        local_pos = slot - base
-        if local_pos + 1 < seg_len:
-            next_slot = slot + 1
-            for s in swimmers:
-                solver2.Add(x2[(s, slot)] + x2[(s, next_slot)] <= 1)
+    if enforce_adjacent_rest:
+        for (slot, seg_idx, ev) in slots:
+            seg_len = len(segments[seg_idx])
+            base = seg_offsets[seg_idx]
+            local_pos = slot - base
+            if local_pos + 1 < seg_len:
+                next_slot = slot + 1
+                for s in swimmers:
+                    solver2.Add(x2[(s, slot)] + x2[(s, next_slot)] <= 1)
 
     # Fix total points to optimum from pass 1
     total_points2 = solver2.Sum(points.get((s, ev), 0) * x2[(s, slot)]
@@ -178,39 +207,3 @@ def enumerate_top_k_by_congestion(
 
     return ranked
 
-
-# -----------------------------
-# Example usage / demo
-# -----------------------------
-if __name__ == "__main__":
-    swimmers = [i for i in range(1, 20)]
-    # Toy points
-    import random
-    random.seed(0)
-    sample_points: Dict[Tuple[int, Event], float] = {}
-    for s in swimmers:
-        for ev in Event:
-            sample_points[(s, ev)] = random.randint(700, 950)
-
-    ranked = enumerate_top_k_by_congestion(
-        swimmers=swimmers,
-        points=sample_points,
-        segments=segments_vm_m,
-        max_races_per_swimmer=5,
-    )
-
-    print(f"Found {len(ranked)} optimal-points solutions (ranked by congestion).")
-    for idx, (pen, lineup) in enumerate(ranked, 1):
-        print(f"\n=== Solution #{idx} — Congestion penalty: {pen:.0f} ===")
-        current_seg = -1
-        check_points = 0
-        for (slot, seg_idx, ev, s, pts) in lineup:
-            if seg_idx != current_seg:
-                current_seg = seg_idx
-                print(f"--- Segment {seg_idx} ---")
-            print(f"  Slot {slot:>2}: {ev.value:<12} -> S{s} ({pts} pts)")
-            check_points += pts
-        print(f"Total points (fixed): {check_points:.0f}")
-
-
-print("--- %s seconds ---" % (time.time() - start_time))

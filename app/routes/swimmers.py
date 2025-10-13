@@ -317,19 +317,20 @@ def edit(swimmer_id: int):
                     if existing:
                         db.session.delete(existing)
                     continue
-
-                if existing is None:
-                    db.session.add(
-                        PB(
-                            swimmer_id=swimmer.id,
-                            event=event,
-                            points=points_value if points_value is not None else 0,
-                            time_seconds=time_value,
+                
+                if points_value is not None:
+                    if existing is None and points_value is not None:
+                        db.session.add(
+                            PB(
+                                swimmer_id=swimmer.id,
+                                event=event,
+                                points=points_value,
+                                time_seconds=time_value,
+                            )
                         )
-                    )
-                else:
-                    existing.points = points_value if points_value is not None else 0
-                    existing.time_seconds = time_value
+                    else:
+                        existing.points = points_value
+                        existing.time_seconds = time_value
 
             if not errors:
                 swimmer.name = form_name
