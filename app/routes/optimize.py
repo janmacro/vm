@@ -15,7 +15,6 @@ from ..services import optimizer
 bp = Blueprint("optimize", __name__, url_prefix="/optimize")
 
 COMPETITION_OPTIONS: List[str] = ["Allgemeine Kategorie", "Nachwuchs"]
-DEFAULT_TOP_K = 10
 
 
 def _collect_active_swimmers(gender: str) -> List[Swimmer]:
@@ -27,65 +26,53 @@ def _collect_active_swimmers(gender: str) -> List[Swimmer]:
     return list(db.session.scalars(stmt))
 
 
-def _format_solutions(
-    solutions,
+def _format_solution(
+    assignment,
     segments,
     swimmer_lookup: Dict[int, Swimmer],
-) -> List[Dict[str, Any]]:
-    if not solutions:
-        return []
-
+) -> Dict[str, Any]:
     segment_offsets = []
     running = 0
     for seg in segments:
         segment_offsets.append(running)
         running += len(seg)
-
-    formatted: List[Dict[str, Any]] = []
-    for rank, (penalty, assignment) in enumerate(solutions, start=1):
-        total_points = sum(item[4] for item in assignment)
-        segment_rows: List[Dict[str, Any]] = []
-        for seg_idx, seg_events in enumerate(segments):
-            rows = []
-            for slot, assigned_seg_idx, event, swimmer_id, pts in assignment:
-                if assigned_seg_idx != seg_idx:
-                    continue
-                local_slot = slot - segment_offsets[seg_idx] + 1
-                rows.append(
-                    {
-                        "slot": local_slot,
-                        "event": event.value,
-                        "swimmer": swimmer_lookup.get(swimmer_id).name if swimmer_id in swimmer_lookup else "—",
-                        "points": pts,
-                    }
-                )
-            rows.sort(key=lambda item: item["slot"])
-            segment_rows.append(
+    total_points = sum(item[4] for item in assignment)
+    segment_rows: List[Dict[str, Any]] = []
+    for seg_idx, seg_events in enumerate(segments):
+        rows = []
+        for slot, assigned_seg_idx, event, swimmer_id, pts in assignment:
+            if assigned_seg_idx != seg_idx:
+                continue
+            local_slot = slot - segment_offsets[seg_idx] + 1
+            rows.append(
                 {
-                    "label": f"Segment {seg_idx + 1}",
-                    "entries": rows,
+                    "slot": local_slot,
+                    "event": event.value,
+                    "swimmer": swimmer_lookup.get(swimmer_id).name if swimmer_id in swimmer_lookup else "—",
+                    "points": pts,
                 }
             )
-        formatted.append(
+        rows.sort(key=lambda item: item["slot"])
+        segment_rows.append(
             {
-                "rank": rank,
-                "penalty": penalty,
-                "total_points": total_points,
-                "segments": segment_rows,
+                "label": f"Segment {seg_idx + 1}",
+                "entries": rows,
             }
         )
 
-    return formatted
+    return {
+        "total_points": total_points,
+        "segments": segment_rows,
+    }
 
 
 @bp.route("/", methods=["GET", "POST"])
 def index():
     selected_gender = request.form.get("gender", "f")
     competition = request.form.get("competition", COMPETITION_OPTIONS[0])
-    enforce_rest = True if request.method == "GET" else bool(request.form.get("enforce_rest"))
 
     errors: List[str] = []
-    results: List[Dict[str, Any]] = []
+    solution: Dict[str, Any] = None
     ran = request.method == "POST"
 
     try:
@@ -139,31 +126,26 @@ def index():
         }
 
         try:
-            solutions = optimizer.enumerate_top_k_by_congestion(
+            penalty, lineup = optimizer.compute_best_lineup(
                 swimmers=swimmer_ids,
                 points=points,
                 segments=segments,
                 max_races_per_swimmer=max_races,
-                enforce_adjacent_rest=enforce_rest,
-                top_k=DEFAULT_TOP_K,
             )
         except ValueError as exc:
             errors.append(str(exc))
-            solutions = []
         except RuntimeError as exc:
             errors.append(f"Optimization failed: {exc}")
-            solutions = []
-
-        swimmer_lookup = {sw.id: sw for sw in swimmers}
-        results = _format_solutions(solutions, segments, swimmer_lookup)
+        else:
+            swimmer_lookup = {sw.id: sw for sw in swimmers}
+            solution = _format_solution(lineup, segments, swimmer_lookup)
 
     return render_template(
         "optimize/index.html",
         competition_options=COMPETITION_OPTIONS,
         selected_gender=selected_gender,
         selected_competition=competition,
-        enforce_rest=enforce_rest,
         errors=errors,
-        results=results,
+        solution=solution,
         ran=ran,
     )

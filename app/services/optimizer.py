@@ -46,16 +46,14 @@ def get_segments(gender: str, competition: str) -> List[List[Event]]:
 def get_max_races_per_swimmer(competition: str) -> int:
     return MAX_RACES_PER_SWIMMER.get(competition)
 
-def enumerate_top_k_by_congestion(
+def compute_best_lineup(
     swimmers: List[int],
     points: Dict[Tuple[int, Event], float],
     segments: List[List[Event]],
     max_races_per_swimmer: int,
-    *,
-    enforce_adjacent_rest: bool = True,
+    enforce_adjacent_rest: bool = False,
     congestion_window_sizes: Tuple[int, ...] = (3, 4),
     congestion_weights: Dict[int, int] = None,
-    top_k: int = 100,
 ) -> List[Tuple[float, List[Tuple[int, int, Event, int, float]]]]:
     """
     Returns a list of up to top_k solutions, each as:
@@ -71,7 +69,6 @@ def enumerate_top_k_by_congestion(
     for seg_idx, seg in enumerate(segments):
         for ev in seg:
             slots.append((len(slots), seg_idx, ev))
-    num_slots = len(slots)
 
     # Precompute segment base offsets once: seg_offsets[g] = first global slot index of segment g
     seg_offsets: List[int] = [0] * len(segments)
@@ -171,39 +168,25 @@ def enumerate_top_k_by_congestion(
                     solver2.Add(excess >= count - 1)
                     penalty_terms.append(w * excess)
 
+    # Objective: minimize congestion penalty
     total_penalty = solver2.Sum(penalty_terms)
+    solver2.Minimize(total_penalty)
 
-    # ---- Enumerate top_k by adding no-good cuts ----
-    ranked: List[Tuple[float, List[Tuple[int, int, Event, int, float]]]] = []
-    N = num_slots
+    status2 = solver2.Solve()
+    if status2 != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError(f"Second pass failed (status={status})")
 
-    while len(ranked) < top_k:
-        solver2.Minimize(total_penalty)
-        if solver2.Solve() != pywraplp.Solver.OPTIMAL:
-            break
+    # Extract this solution
+    assignment = []
+    for (slot, seg_idx, ev) in slots:
+        chosen = None
+        for s in swimmers:
+            if x2[(s, slot)].solution_value() > 0.5:
+                chosen = s
+                break
+        pts = points.get((chosen, ev), 0) if chosen is not None else 0
+        assignment.append((slot, seg_idx, ev, chosen, pts))
 
-        # Extract this solution
-        assignment = []
-        for (slot, seg_idx, ev) in slots:
-            chosen = None
-            for s in swimmers:
-                if x2[(s, slot)].solution_value() > 0.5:
-                    chosen = s
-                    break
-            pts = points.get((chosen, ev), 0) if chosen is not None else 0
-            assignment.append((slot, seg_idx, ev, chosen, pts))
+    pen_val = solver2.Objective().Value()
 
-        pen_val = solver2.Objective().Value()
-        ranked.append((pen_val, assignment))
-
-        # Add a no-good cut to forbid this exact assignment:
-        # sum of chosen x2 == N for this solution, so we force ≤ N-1 next time.
-        solver2.Add(
-            solver2.Sum(
-                x2[(s, slot)]
-                for (slot, _, _, s, _) in assignment
-            ) <= N - 1
-        )
-
-    return ranked
-
+    return (pen_val, assignment)

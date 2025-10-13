@@ -2,6 +2,18 @@
 
 {% block content %}
 <div class="flex flex-col gap-6">
+  <section class="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+    <p>
+      Generate optimal lineups by selecting the roster and competition below.
+      Only active swimmers are considered.
+    </p>
+    <p class="mt-3">
+      The optimizer always finds the maximum possible points. There may be multiple equally-good
+      lineups (for example, swapping swimmers across days). We show the option where swimmers have 
+      more rest between races, but feel free to tweak the lineup.
+    </p>
+  </section>
+
   <form method="post" class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
     <div class="grid gap-4 md:grid-cols-2">
       <fieldset class="flex flex-col gap-3">
@@ -41,17 +53,6 @@
       </fieldset>
     </div>
 
-    <label class="flex items-center gap-2 text-sm text-slate-700">
-      <input
-        type="checkbox"
-        name="enforce_rest"
-        value="on"
-        class="text-indigo-600 focus:ring-indigo-500"
-        {% if enforce_rest %}checked{% endif %}
-      >
-      Enforce at least one break between consecutive races for each swimmer
-    </label>
-
     <button
       type="submit"
       class="self-start rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
@@ -70,56 +71,48 @@
     </div>
   {% endif %}
 
-  {% if ran and not errors and not results %}
+  {% if ran and not errors and not solution %}
     <div class="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
       No feasible lineup could be generated with the current selections.
     </div>
   {% endif %}
 
-  {% if results %}
-    <section class="flex flex-col gap-6">
-      {% for solution in results %}
-        <article class="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <header class="flex flex-col gap-1 border-b border-slate-200 px-4 py-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-lg font-semibold text-slate-800">Solution {{ solution.rank }}</h3>
-              <span class="text-sm font-medium text-slate-600">Total points: {{ solution.total_points|int }}</span>
-            </div>
-            <p class="text-sm tracking-wide text-slate-400">
-              Congestion penalty: {{ solution.penalty|int }}
-              {% if not enforce_rest %}(hard rest disabled){% endif %}
-            </p>
-          </header>
-          <div class="flex flex-col gap-4 p-4">
-            {% for segment in solution.segments %}
-              <section class="rounded border border-slate-100 bg-slate-50 p-3">
-                <h4 class="text-sm font-semibold text-slate-700">{{ segment.label }}</h4>
-                <table class="mt-2 w-full table-fixed text-sm">
-                  <thead class="text-sm tracking-wide text-slate-500">
-                    <tr>
-                      <th class="w-16 text-left">Slot</th>
-                      <th class="w-48 text-left">Event</th>
-                      <th class="text-left">Swimmer</th>
-                      <th class="w-24 text-right">Points</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-200">
-                    {% for entry in segment.entries %}
-                      <tr>
-                        <td class="py-1 text-left">{{ entry.slot }}</td>
-                        <td class="py-1 text-left">{{ entry.event }}</td>
-                        <td class="py-1 text-left">{{ entry.swimmer }}</td>
-                        <td class="py-1 text-right">{{ entry.points|int }}</td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </section>
-            {% endfor %}
+  {% if solution %}
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-col gap-1 border-b border-slate-200 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-lg font-semibold text-slate-800">Optimized Lineup</h3>
+          <span class="text-sm font-medium text-slate-600">Total points: {{ solution.total_points|int }}</span>
+        </div>
+      </div>
+      <div class="flex flex-col gap-4 p-4">
+        {% for segment in solution.segments %}
+          <div class="rounded border border-slate-100 bg-slate-50 p-3">
+            <h4 class="text-sm font-semibold text-slate-700">{{ segment.label }}</h4>
+            <table class="mt-2 w-full table-fixed text-sm">
+              <thead class="text-sm tracking-wide text-slate-500">
+                <tr>
+                  <th class="w-16 text-left">Slot</th>
+                  <th class="w-48 text-left">Event</th>
+                  <th class="text-left">Swimmer</th>
+                  <th class="w-24 text-right">Points</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                {% for entry in segment.entries %}
+                  <tr>
+                    <td class="py-1 text-left">{{ entry.slot }}</td>
+                    <td class="py-1 text-left">{{ entry.event }}</td>
+                    <td class="py-1 text-left">{{ entry.swimmer }}</td>
+                    <td class="py-1 text-right">{{ entry.points|int }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
-        </article>
-      {% endfor %}
-    </section>
+        {% endfor %}
+      </div>
+    </div>
   {% endif %}
 </div>
 {% endblock %}
