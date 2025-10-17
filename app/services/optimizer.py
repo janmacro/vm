@@ -174,7 +174,7 @@ def compute_best_lineup(
 
     status2 = solver2.Solve()
     if status2 != pywraplp.Solver.OPTIMAL:
-        raise RuntimeError(f"Second pass failed (status={status})")
+        raise RuntimeError(f"Second pass failed (status={status2})")
 
     # Extract this solution
     assignment = []

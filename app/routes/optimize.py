@@ -30,6 +30,7 @@ def _format_solution(
     assignment,
     segments,
     swimmer_lookup: Dict[int, Swimmer],
+    selected_competition: str,
 ) -> Dict[str, Any]:
     segment_offsets = []
     running = 0
@@ -53,9 +54,16 @@ def _format_solution(
                 }
             )
         rows.sort(key=lambda item: item["slot"])
+        if selected_competition == "Allgemeine Kategorie":
+            day = seg_idx // 2 + 1
+            seg = seg_idx % 2 + 1
+            label = f"Day {day}, Segment {seg}"
+        else:
+            label = f"Segment {seg_idx + 1}"
+
         segment_rows.append(
             {
-                "label": f"Segment {seg_idx + 1}",
+                "label": label,
                 "entries": rows,
             }
         )
@@ -73,6 +81,7 @@ def index():
 
     errors: List[str] = []
     solution: Dict[str, Any] = None
+    enforce_rest = True if request.method == "GET" else bool(request.form.get("enforce_rest"))
     ran = request.method == "POST"
 
     try:
@@ -131,6 +140,7 @@ def index():
                 points=points,
                 segments=segments,
                 max_races_per_swimmer=max_races,
+                enforce_adjacent_rest=enforce_rest
             )
         except ValueError as exc:
             errors.append(str(exc))
@@ -138,13 +148,14 @@ def index():
             errors.append(f"Optimization failed: {exc}")
         else:
             swimmer_lookup = {sw.id: sw for sw in swimmers}
-            solution = _format_solution(lineup, segments, swimmer_lookup)
+            solution = _format_solution(lineup, segments, swimmer_lookup, competition)
 
     return render_template(
         "optimize/index.html",
         competition_options=COMPETITION_OPTIONS,
         selected_gender=selected_gender,
         selected_competition=competition,
+        enforce_rest=enforce_rest,
         errors=errors,
         solution=solution,
         ran=ran,

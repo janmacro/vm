@@ -53,6 +53,17 @@
       </fieldset>
     </div>
 
+    <label class="flex items-center gap-2 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        name="enforce_rest"
+        value="on"
+        class="text-indigo-600 focus:ring-indigo-500"
+        {% if enforce_rest %}checked{% endif %}
+      >
+      Enforce at least one break between consecutive races for each swimmer
+    </label>
+
     <button
       type="submit"
       class="self-start rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
