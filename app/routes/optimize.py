@@ -135,12 +135,12 @@ def index():
         }
 
         try:
-            penalty, lineup = optimizer.compute_best_lineup(
+            lineup = optimizer.compute_best_lineup(
                 swimmers=swimmer_ids,
                 points=points,
                 segments=segments,
                 max_races_per_swimmer=max_races,
-                enforce_adjacent_rest=enforce_rest
+                enforce_adjacent_rest=enforce_rest,
             )
         except ValueError as exc:
             errors.append(str(exc))
