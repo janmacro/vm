@@ -135,7 +135,7 @@ def index():
         }
 
         try:
-            penalty, lineup = optimizer.compute_best_lineup(
+            lineup = optimizer.compute_best_lineup(
                 swimmers=swimmer_ids,
                 points=points,
                 segments=segments,

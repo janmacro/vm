@@ -52,141 +52,253 @@ def compute_best_lineup(
     segments: List[List[Event]],
     max_races_per_swimmer: int,
     enforce_adjacent_rest: bool = False,
-    congestion_window_sizes: Tuple[int, ...] = (3, 4),
-    congestion_weights: Dict[int, int] = None,
-) -> List[Tuple[float, List[Tuple[int, int, Event, int, float]]]]:
+) -> List[Tuple[int, int, Event, int, float]]:
     """
-    Returns a list of up to top_k solutions, each as:
-        (congestion_penalty, assignment)
-    where assignment is [(slot, seg_idx, event, swimmer, pts), ...],
-    ranked from lowest (best) congestion penalty upward.
-    """
-    if congestion_weights is None:
-        congestion_weights = {3: 2, 4: 1}
+    Optimizer:
+      Pass 1: maximize total points.
+      Pass 2: with points fixed, maximize # of distinct swimmers used.
+      Pass 3: with (points, #used) fixed, minimize maximum total races per swimmer.
+      Pass 4: with (points, #used, minimax) fixed, improve smoothness per segment:
+              priority A) avoid adjacency (gap=0),
+              priority B) avoid gap=1 pairs (one-break),
+              priority C) minimize max per-segment load.
 
-    # Create flat list with all slots
+    Returns:
+        assignment: List[(slot, seg_idx, event, swimmer, pts)]
+    """
+
+    # ---- Build flat slot list and segment base offsets ----
     slots: List[Tuple[int, int, Event]] = []
     for seg_idx, seg in enumerate(segments):
         for ev in seg:
             slots.append((len(slots), seg_idx, ev))
 
-    # Precompute segment base offsets once: seg_offsets[g] = first global slot index of segment g
     seg_offsets: List[int] = [0] * len(segments)
     running = 0
     for g, seg in enumerate(segments):
         seg_offsets[g] = running
         running += len(seg)
 
+    events_present = set(ev for *_, ev in slots)
+    S = len(swimmers)
+    seg_lengths = [len(seg) for seg in segments]
+    Nmax = max(seg_lengths) if seg_lengths else 0
+    BIG = max_races_per_swimmer
+
     # ---- PASS 1: maximize total points ----
-    solver = pywraplp.Solver.CreateSolver("CBC")
-    if not solver:
+    solver1 = pywraplp.Solver.CreateSolver("CBC")
+    if not solver1:
         raise RuntimeError("OR-Tools CBC solver not available (pass 1)")
 
-    # Decision: x[(s, slot)] ∈ {0,1}
-    x = {(s, slot): solver.BoolVar(f"x_s{s}_{slot}") for s in swimmers for (slot, _, _) in slots}
+    x1 = {(s, slot): solver1.BoolVar(f"x1_s{s}_{slot}")
+          for s in swimmers for (slot, _, _) in slots}
 
-    # 1) Each slot covered by exactly one swimmer
-    for (slot, seg_idx, ev) in slots:
-        solver.Add(sum(x[(s, slot)] for s in swimmers) == 1)
-    # 2) Per-swimmer max races
+    # constraints
+    for (slot, _, _) in slots:
+        solver1.Add(solver1.Sum(x1[(s, slot)] for s in swimmers) == 1)
     for s in swimmers:
-        solver.Add(sum(x[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
-    # 3) No duplicate event per swimmer (across all segments)
-    events_present = set(ev for *_, ev in slots)
+        solver1.Add(solver1.Sum(x1[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
     for s in swimmers:
         for ev in events_present:
-            solver.Add(sum(x[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
-    # 4) Hard rest: no back-to-back starts for same swimmer within a segment
+            solver1.Add(solver1.Sum(x1[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
     if enforce_adjacent_rest:
-        for (slot, seg_idx, ev) in slots:
-            seg_len = len(segments[seg_idx])
+        for (slot, seg_idx, _) in slots:
             base = seg_offsets[seg_idx]
-            local_pos = slot - base
-            if local_pos + 1 < seg_len:
-                next_slot = slot + 1
+            seg_len = len(segments[seg_idx])
+            local = slot - base
+            if local + 1 < seg_len:
                 for s in swimmers:
-                    solver.Add(x[(s, slot)] + x[(s, next_slot)] <= 1)
+                    solver1.Add(x1[(s, slot)] + x1[(s, slot + 1)] <= 1)
 
-    # Objective: maximize total points
-    total_points = solver.Sum(points.get((s, ev), 0) * x[(s, slot)]
-                              for s in swimmers
-                              for (slot, _, ev) in slots)
-    solver.Maximize(total_points)
+    total_points1 = solver1.Sum(points.get((s, ev), 0.0) * x1[(s, slot)]
+                                for s in swimmers for (slot, _, ev) in slots)
+    solver1.Maximize(total_points1)
+    if solver1.Solve() != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError("First pass failed")
+    best_points = int(round(total_points1.solution_value()))
 
-    status = solver.Solve()
-    if status != pywraplp.Solver.OPTIMAL:
-        raise RuntimeError(f"First pass failed (status={status})")
-    best_points = solver.Objective().Value()
-
-    # ---- PASS 2 base model: lock points, build congestion objective ----
+    # ---- PASS 2: maximize number of swimmers used (points fixed) ----
     solver2 = pywraplp.Solver.CreateSolver("CBC")
     if not solver2:
         raise RuntimeError("OR-Tools CBC solver not available (pass 2)")
 
-    x2 = {(s, slot): solver2.BoolVar(f"x_s{s}_{slot}") for s in swimmers for (slot, _, _) in slots}
+    x2 = {(s, slot): solver2.BoolVar(f"x2_s{s}_{slot}")
+          for s in swimmers for (slot, _, _) in slots}
 
-    # same constraints
-    for (slot, seg_idx, ev) in slots:
-        solver2.Add(sum(x2[(s, slot)] for s in swimmers) == 1)
+    for (slot, _, _) in slots:
+        solver2.Add(solver2.Sum(x2[(s, slot)] for s in swimmers) == 1)
     for s in swimmers:
-        solver2.Add(sum(x2[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
+        solver2.Add(solver2.Sum(x2[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
     for s in swimmers:
         for ev in events_present:
-            solver2.Add(sum(x2[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
+            solver2.Add(solver2.Sum(x2[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
     if enforce_adjacent_rest:
-        for (slot, seg_idx, ev) in slots:
-            seg_len = len(segments[seg_idx])
+        for (slot, seg_idx, _) in slots:
             base = seg_offsets[seg_idx]
-            local_pos = slot - base
-            if local_pos + 1 < seg_len:
-                next_slot = slot + 1
+            seg_len = len(segments[seg_idx])
+            local = slot - base
+            if local + 1 < seg_len:
                 for s in swimmers:
-                    solver2.Add(x2[(s, slot)] + x2[(s, next_slot)] <= 1)
+                    solver2.Add(x2[(s, slot)] + x2[(s, slot + 1)] <= 1)
 
-    # Fix total points to optimum from pass 1
-    total_points2 = solver2.Sum(points.get((s, ev), 0) * x2[(s, slot)]
-                                for s in swimmers
-                                for (slot, _, ev) in slots)
-    solver2.Add(total_points2 == int(best_points))
+    tot2 = solver2.Sum(points.get((s, ev), 0.0) * x2[(s, slot)]
+                       for s in swimmers for (slot, _, ev) in slots)
+    solver2.Add(tot2 == best_points)
 
-    # Congestion objective
-    penalty_terms = []
-    for seg_idx, seg in enumerate(segments):
-        seg_len = len(seg)
-        base = seg_offsets[seg_idx]
-        seg_slots = list(range(base, base + seg_len))
-        for L in congestion_window_sizes:
-            if L <= 1 or L > seg_len:
-                continue
-            w = congestion_weights.get(L, 1) if congestion_weights else 1
-            for start in range(seg_len - L + 1):
-                window_slots = seg_slots[start:start + L]
+    used2 = {s: solver2.BoolVar(f"used2_s{s}") for s in swimmers}
+    for s in swimmers:
+        races_s = solver2.Sum(x2[(s, slot)] for (slot, _, _) in slots)
+        solver2.Add(races_s <= BIG * used2[s])
+        solver2.Add(races_s >= used2[s])
+
+    solver2.Maximize(solver2.Sum(used2[s] for s in swimmers))
+    if solver2.Solve() != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError("Second pass failed")
+    max_used = int(round(sum(used2[s].solution_value() for s in swimmers)))
+
+    # ---- PASS 3: minimize max total races per swimmer (with points & #used fixed) ----
+    solver3 = pywraplp.Solver.CreateSolver("CBC")
+    if not solver3:
+        raise RuntimeError("OR-Tools CBC solver not available (pass 3)")
+
+    x3 = {(s, slot): solver3.BoolVar(f"x3_s{s}_{slot}")
+          for s in swimmers for (slot, _, _) in slots}
+
+    for (slot, _, _) in slots:
+        solver3.Add(solver3.Sum(x3[(s, slot)] for s in swimmers) == 1)
+    for s in swimmers:
+        solver3.Add(solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
+    for s in swimmers:
+        for ev in events_present:
+            solver3.Add(solver3.Sum(x3[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
+    if enforce_adjacent_rest:
+        for (slot, seg_idx, _) in slots:
+            base = seg_offsets[seg_idx]
+            seg_len = len(segments[seg_idx])
+            local = slot - base
+            if local + 1 < seg_len:
                 for s in swimmers:
-                    count = solver2.IntVar(0, L, f"cnt_s{s}_{seg_idx}_{start}_{L}")
-                    solver2.Add(count == solver2.Sum(x2[(s, sl)] for sl in window_slots))
-                    excess = solver2.IntVar(0, L - 1, f"exc_s{s}_{seg_idx}_{start}_{L}")
-                    solver2.Add(excess >= count - 1)
-                    penalty_terms.append(w * excess)
+                    solver3.Add(x3[(s, slot)] + x3[(s, slot + 1)] <= 1)
 
-    # Objective: minimize congestion penalty
-    total_penalty = solver2.Sum(penalty_terms)
-    solver2.Minimize(total_penalty)
+    tot3 = solver3.Sum(points.get((s, ev), 0.0) * x3[(s, slot)]
+                       for s in swimmers for (slot, _, ev) in slots)
+    solver3.Add(tot3 == best_points)
 
-    status2 = solver2.Solve()
-    if status2 != pywraplp.Solver.OPTIMAL:
-        raise RuntimeError(f"Second pass failed (status={status2})")
+    used3 = {s: solver3.BoolVar(f"used3_s{s}") for s in swimmers}
+    for s in swimmers:
+        y = solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots)
+        solver3.Add(y <= BIG * used3[s])
+        solver3.Add(y >= used3[s])
+    solver3.Add(solver3.Sum(used3[s] for s in swimmers) == max_used)
 
-    # Extract this solution
-    assignment = []
+    y3 = {s: solver3.IntVar(0, max_races_per_swimmer, f"y3_s{s}") for s in swimmers}
+    for s in swimmers:
+        solver3.Add(y3[s] == solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots))
+
+    Mtot = solver3.IntVar(0, max_races_per_swimmer, "Mtot")
+    for s in swimmers:
+        solver3.Add(y3[s] <= Mtot)
+
+    solver3.Minimize(Mtot)
+    if solver3.Solve() != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError("Third pass failed")
+    min_max_total = int(round(Mtot.solution_value()))
+
+    # ---- PASS 4: spacing within segments (adjacency > one-break > per-seg max) ----
+    solver4 = pywraplp.Solver.CreateSolver("CBC")
+    if not solver4:
+        raise RuntimeError("OR-Tools CBC solver not available (pass 4)")
+
+    x4 = {(s, slot): solver4.BoolVar(f"x4_s{s}_{slot}")
+          for s in swimmers for (slot, _, _) in slots}
+
+    # hard constraints
+    for (slot, _, _) in slots:
+        solver4.Add(solver4.Sum(x4[(s, slot)] for s in swimmers) == 1)
+    for s in swimmers:
+        solver4.Add(solver4.Sum(x4[(s, slot)] for (slot, _, _) in slots) <= max_races_per_swimmer)
+    for s in swimmers:
+        for ev in events_present:
+            solver4.Add(solver4.Sum(x4[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
+
+    # lock points, #used, and global minimax
+    tot4 = solver4.Sum(points.get((s, ev), 0.0) * x4[(s, slot)]
+                       for s in swimmers for (slot, _, ev) in slots)
+    solver4.Add(tot4 == best_points)
+
+    used4 = {s: solver4.BoolVar(f"used4_s{s}") for s in swimmers}
+    for s in swimmers:
+        y = solver4.Sum(x4[(s, slot)] for (slot, _, _) in slots)
+        solver4.Add(y <= BIG * used4[s])
+        solver4.Add(y >= used4[s])
+        solver4.Add(y <= min_max_total)  # preserve global minimax
+    solver4.Add(solver4.Sum(used4[s] for s in swimmers) == max_used)
+
+    # A) adjacency (gap=0) penalties
+    z0_list = []
+    for g, seg in enumerate(segments):
+        base = seg_offsets[g]; N = len(seg)
+        for s in swimmers:
+            for i in range(N - 1):
+                a = x4[(s, base + i)]
+                b = x4[(s, base + i + 1)]
+                z = solver4.BoolVar(f"adj_{s}_{g}_{i}")
+                solver4.Add(z >= a + b - 1)
+                solver4.Add(z <= a)
+                solver4.Add(z <= b)
+                z0_list.append(z)
+    V_adj = solver4.Sum(z0_list)
+
+    # B) one-break (gap=1) penalties via length-3 windows: excess >= count - 1
+    z1_list = []
+    for g, seg in enumerate(segments):
+        base = seg_offsets[g]; N = len(seg)
+        if N >= 3:
+            for s in swimmers:
+                for i in range(N - 2):
+                    count = solver4.IntVar(0, 3, f"cnt3_{s}_{g}_{i}")
+                    solver4.Add(count == x4[(s, base + i)] +
+                                         x4[(s, base + i + 1)] +
+                                         x4[(s, base + i + 2)])
+                    exc = solver4.IntVar(0, 2, f"exc3_{s}_{g}_{i}")
+                    solver4.Add(exc >= count - 1)
+                    z1_list.append(exc)
+    V_gap1 = solver4.Sum(z1_list)
+
+    # C) per-segment load balance: minimize Mseg = max_{s,g} races in segment g for swimmer s
+    y_seg = {(s, g): solver4.IntVar(0, len(seg), f"yseg_{s}_{g}")
+             for g, seg in enumerate(segments) for s in swimmers}
+    for g, seg in enumerate(segments):
+        base = seg_offsets[g]; N = len(seg)
+        for s in swimmers:
+            solver4.Add(y_seg[(s, g)] == solver4.Sum(x4[(s, base + i)] for i in range(N)))
+
+    Mseg = solver4.IntVar(0, Nmax, "Mseg")
+    for (s, g), ysg in y_seg.items():
+        solver4.Add(ysg <= Mseg)
+
+    # Weights to enforce lexicographic priority: W0 (adjacency) > W1 (gap1) > Mseg
+    UB_adj = sum(max(0, N - 1) for N in seg_lengths) * S
+    UB_gap1 = sum(max(0, N - 2) * 2 for N in seg_lengths) * S
+    base_M = Nmax if Nmax > 0 else 1
+
+    W1 = base_M + 1                     # gap1 dominates Mseg
+    W0 = UB_gap1 * W1 + base_M + 1      # adjacency dominates (gap1 + Mseg)
+
+    solver4.Minimize(W0 * V_adj + W1 * V_gap1 + Mseg)
+
+    if solver4.Solve() != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError("Fourth pass failed")
+
+    # ---- Extract final assignment from pass 4 ----
+    assignment: List[Tuple[int, int, Event, int, float]] = []
     for (slot, seg_idx, ev) in slots:
         chosen = None
         for s in swimmers:
-            if x2[(s, slot)].solution_value() > 0.5:
+            if x4[(s, slot)].solution_value() > 0.5:
                 chosen = s
                 break
-        pts = points.get((chosen, ev), 0) if chosen is not None else 0
+        pts = points.get((chosen, ev), 0.0) if chosen is not None else 0.0
         assignment.append((slot, seg_idx, ev, chosen, pts))
 
-    pen_val = solver2.Objective().Value()
-
-    return (pen_val, assignment)
+    return assignment
