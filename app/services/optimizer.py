@@ -79,12 +79,12 @@ def compute_best_lineup(
             slot_counter += 1
         segment_slot_indices.append(indices)
 
-    seg_offsets: List[int] = [0] * len(segments)
+    # Cumulative starting index for each segment in the flattened slot list
+    seg_offsets: List[int] = []
     running = 0
     for seg in segments:
         seg_offsets.append(running)
         running += len(seg)
-    seg_offsets = seg_offsets[1:]
 
     events_present = set(ev for *_, ev in slots)
     S = len(swimmers)
@@ -227,6 +227,14 @@ def compute_best_lineup(
     for s in swimmers:
         for ev in events_present:
             solver4.Add(solver4.Sum(x4[(s, slot)] for (slot, _, ev2) in slots if ev2 == ev) <= 1)
+    if enforce_adjacent_rest:
+        for (slot, seg_idx, _) in slots:
+            base = seg_offsets[seg_idx]
+            seg_len = len(segments[seg_idx])
+            local = slot - base
+            if local + 1 < seg_len:
+                for s in swimmers:
+                    solver4.Add(x4[(s, slot)] + x4[(s, slot + 1)] <= 1)
 
     # lock points, #used, and global minimax
     tot4 = solver4.Sum(points.get((s, ev), 0.0) * x4[(s, slot)]

@@ -11,6 +11,7 @@ from flask import (
     url_for,
 )
 from sqlalchemy import select
+from flask_login import login_required, current_user
 
 from ..db import db
 from ..models import Event, PB, Swimmer
@@ -28,6 +29,8 @@ def _is_htmx(req: Any) -> bool:
 def _get_swimmer_or_404(swimmer_id: int) -> Swimmer:
     swimmer = db.session.get(Swimmer, swimmer_id)
     if swimmer is None:
+        abort(404)
+    if swimmer.owner_id != getattr(current_user, "id", None):
         abort(404)
     return swimmer
 
@@ -124,16 +127,17 @@ def _build_form_from_swimmer(swimmer: Swimmer, events: list[Event]) -> Dict[str,
 
 
 @bp.get("/")
+@login_required
 def index() -> str:
     """List swimmers grouped by gender."""
     female_stmt = (
         select(Swimmer)
-        .where(Swimmer.gender == "f")
+        .where(Swimmer.gender == "f", Swimmer.owner_id == current_user.id)
         .order_by(Swimmer.name.asc())
     )
     male_stmt = (
         select(Swimmer)
-        .where(Swimmer.gender == "m")
+        .where(Swimmer.gender == "m", Swimmer.owner_id == current_user.id)
         .order_by(Swimmer.name.asc())
     )
     female_swimmers = db.session.scalars(female_stmt).all()
@@ -146,6 +150,7 @@ def index() -> str:
 
 
 @bp.route("/new/<gender>", methods=["GET", "POST"])
+@login_required
 def new(gender: str):
     gender_normalized = gender.lower()
     if gender_normalized not in {"m", "f"}:
@@ -196,7 +201,7 @@ def new(gender: str):
                 errors.append("Name is required.")
             if not errors:
                 pb_objects: list[PB] = []
-                swimmer = Swimmer(name=name_value, gender=gender_normalized)
+                swimmer = Swimmer(name=name_value, gender=gender_normalized, owner_id=current_user.id)
                 db.session.add(swimmer)
                 db.session.flush()
 
@@ -248,6 +253,7 @@ def new(gender: str):
 
 
 @bp.route("/<int:swimmer_id>/edit", methods=["GET", "POST"])
+@login_required
 def edit(swimmer_id: int):
     swimmer = _get_swimmer_or_404(swimmer_id)
     events = [
@@ -355,6 +361,7 @@ def edit(swimmer_id: int):
 
 
 @bp.patch("/<int:swimmer_id>/active")
+@login_required
 def toggle_active(swimmer_id: int):
     swimmer = _get_swimmer_or_404(swimmer_id)
     swimmer.active = not swimmer.active
@@ -363,6 +370,7 @@ def toggle_active(swimmer_id: int):
 
 
 @bp.delete("/<int:swimmer_id>")
+@login_required
 def delete(swimmer_id: int) -> Any:
     swimmer = _get_swimmer_or_404(swimmer_id)
     db.session.delete(swimmer)

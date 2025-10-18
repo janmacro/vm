@@ -30,6 +30,29 @@
         >
           Optimizer
         </a>
+        <span class="mx-2 text-slate-300">|</span>
+        {% if current_user.is_authenticated %}
+          <span class="px-2 text-slate-500">{{ current_user.email }}</span>
+          <a
+            class="rounded px-3 py-1 hover:bg-slate-200"
+            href="{{ url_for('auth.logout') }}"
+          >
+            Logout
+          </a>
+        {% else %}
+          <a
+            class="rounded px-3 py-1 hover:bg-slate-200 {% if current_endpoint.startswith('auth.login') %}bg-slate-200 text-slate-900{% endif %}"
+            href="{{ url_for('auth.login') }}"
+          >
+            Login
+          </a>
+          <a
+            class="rounded px-3 py-1 hover:bg-slate-200 {% if current_endpoint.startswith('auth.register') %}bg-slate-200 text-slate-900{% endif %}"
+            href="{{ url_for('auth.register') }}"
+          >
+            Register
+          </a>
+        {% endif %}
       </nav>
     </header>
     <main hx-boost="true">

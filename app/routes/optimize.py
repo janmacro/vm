@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Any, Dict, List
 
 from flask import Blueprint, render_template, request
+from flask_login import login_required, current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -21,7 +22,11 @@ def _collect_active_swimmers(gender: str) -> List[Swimmer]:
     stmt = (
         select(Swimmer)
         .options(selectinload(Swimmer.pbs))
-        .where(Swimmer.gender == gender, Swimmer.active.is_(True))
+        .where(
+            Swimmer.gender == gender,
+            Swimmer.active.is_(True),
+            Swimmer.owner_id == current_user.id,
+        )
     )
     return list(db.session.scalars(stmt))
 
@@ -75,6 +80,7 @@ def _format_solution(
 
 
 @bp.route("/", methods=["GET", "POST"])
+@login_required
 def index():
     selected_gender = request.form.get("gender", "f")
     competition = request.form.get("competition", COMPETITION_OPTIONS[0])

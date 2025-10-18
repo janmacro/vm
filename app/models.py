@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple
 
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from flask_login import UserMixin
 
 from .db import db
 
@@ -35,6 +36,12 @@ class Swimmer(db.Model):
     name: Mapped[str] = mapped_column(db.String(120), nullable=False)
     gender: Mapped[str] = mapped_column(db.String(1), nullable=False)  # 'm' / 'f'
     active: Mapped[bool] = mapped_column(db.Boolean, nullable=False, default=True)
+    owner_id: Mapped[int] = mapped_column(
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner: Mapped["User"] = relationship(back_populates="swimmers")
 
     # One-to-many: delete PBs when swimmer is deleted
     pbs: Mapped[List["PB"]] = relationship(
@@ -79,3 +86,20 @@ class PB(db.Model):
             for pb in (sw.pbs or []):
                 out[(sw.id, pb.event)] = pb.points
         return out
+
+
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(db.String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(db.String(255), nullable=False)
+
+    swimmers: Mapped[List[Swimmer]] = relationship(
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} email={self.email!r}>"
