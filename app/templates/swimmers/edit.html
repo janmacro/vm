@@ -28,6 +28,7 @@
   {% endif %}
 
   <form method="post" class="flex flex-col gap-6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" name="action" value="save" class="hidden" tabindex="-1" aria-hidden="true"></button>
     <fieldset class="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <legend class="px-2 text-sm font-semibold text-slate-700">Name</legend>
