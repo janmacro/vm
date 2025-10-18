@@ -7,6 +7,8 @@ from flask import Blueprint, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from sqlalchemy import select
+
 from ..db import db
 from ..models import User
 
@@ -35,7 +37,7 @@ def register():
             errors.append("Passwords do not match.")
 
         if not errors:
-            existing = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
+            existing = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
             if existing:
                 errors.append("An account with this email already exists.")
             else:
@@ -61,7 +63,7 @@ def login():
         if not email or not password:
             errors.append("Email and password are required.")
         else:
-            user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
+            user = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
             if not user or not check_password_hash(user.password_hash, password):
                 errors.append("Invalid email or password.")
             else:
@@ -77,4 +79,3 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
-
