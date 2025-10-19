@@ -8,6 +8,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from sqlalchemy import select
+from ..limiter import limiter
 
 from ..db import db
 from ..models import User
@@ -17,6 +18,7 @@ bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 @bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("10/day;3/hour")  # throttle account creation by IP
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("swimmers.index"))
@@ -51,6 +53,7 @@ def register():
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("50/hour;10/minute")  # throttle login attempts by IP
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("swimmers.index"))

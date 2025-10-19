@@ -46,6 +46,10 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
     csrf = CSRFProtect()
     csrf.init_app(app)
 
+    # --- Rate limiting ---
+    from .limiter import limiter
+    limiter.init_app(app)
+
     # --- Authentication setup ---
     login_manager = LoginManager()
     login_manager.login_view = "auth.login"

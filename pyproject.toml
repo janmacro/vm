@@ -13,6 +13,7 @@ dependencies = [
   "Flask-SQLAlchemy>=3",
   "SQLAlchemy>=2",
   "Flask-WTF>=1.2",
+  "Flask-Limiter>=4,<5",
   "httpx>=0.27",
   "beautifulsoup4>=4.12",
   "ortools>=9.9",
