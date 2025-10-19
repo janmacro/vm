@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -25,5 +23,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Always run idempotent DB init before starting Gunicorn
-CMD ["sh", "-c", "flask --app app:create_app init-db && exec gunicorn -w 2 -k gthread -b 0.0.0.0:8000 'app:create_app()'"]
+# Always run DB init before starting Gunicorn
+CMD ["sh", "-c", "flask --app app init-db && exec gunicorn -w 2 -k gthread -b 0.0.0.0:8000 'app:create_app()'"]

@@ -1,29 +1,23 @@
 # Vereinsmeisterschaft
 
-Small Flask app to manage swimmers and generate optimal lineups using OR-Tools.
-
-## Features
-- Per-user accounts (Flask-Login) with isolated data
-- CRUD for swimmers and personal bests
-- Import PBs from swimrankings.net
-- Lineup optimizer with rest constraints
-- CSRF protection (Flask-WTF)
+Small Flask app to generate optimal lineups for the
+[Schweizer Vereinsmeisterschaft](https://www.swiss-aquatics.ch/leistungssport/swimming/nationale-meisterschaften/schweizer-vereinsmeisterschaft-nla-nlb/).
 
 ## Quick Start (Docker)
 1. Build the image:
    
-   docker build -t vereinsmeisterschaft .
+   docker build -t vm .
 
 2. Run with a persistent volume and a strong secret key:
    
    docker run -d \
-     --name vereinsmeisterschaft \
+     --name vm \
      -e SECRET_KEY='change-me-to-a-random-string' \
-     -v vm_instance:/app/instance \
+     -v vm_data:/app/instance \
      -p 8000:8000 \
-     vereinsmeisterschaft
+     vm
 
-The container automatically runs an idempotent database init on startup.
+The container automatically runs a database init on startup.
 Visit http://localhost:8000 and register a new account.
 
 ## Environment Variables
@@ -38,5 +32,5 @@ Visit http://localhost:8000 and register a new account.
 
 - Initialize DB and run:
   
-  flask --app app:create_app init-db
-  flask --app app:create_app run --debug
+  flask --app app init-db
+  flask --app app run --debug
