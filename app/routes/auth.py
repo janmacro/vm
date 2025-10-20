@@ -14,11 +14,11 @@ from ..db import db
 from ..models import User
 
 
-bp = Blueprint("auth", __name__, url_prefix="/auth")
+bp = Blueprint("auth", __name__, url_prefix="")
 
 
 @bp.route("/register", methods=["GET", "POST"])
-@limiter.limit("10/day;3/hour")  # throttle account creation by IP
+@limiter.limit("50/day;10/hour")  # throttle account creation by IP
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("swimmers.index"))

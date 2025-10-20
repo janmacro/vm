@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, request
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 
@@ -69,6 +69,17 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
     def inject_csrf_token():
         # Expose a callable csrf_token() for templates
         return {"csrf_token": generate_csrf}
+
+    @login_manager.unauthorized_handler
+    def _unauthorized():
+        # For the root path, redirect to clean login URL without next param
+        if (request.path or "/") == "/":
+            return redirect(url_for("auth.login"))
+        # Preserve next for other endpoints
+        full = request.full_path or request.path
+        if full.endswith("?"):
+            full = full[:-1]
+        return redirect(url_for("auth.login", next=full))
 
     # --- Blueprint registration ---
     from .routes import swimmers, auth

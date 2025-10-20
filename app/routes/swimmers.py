@@ -250,7 +250,7 @@ def index() -> str:
             solution = {"total_points": total_points, "segments": segment_rows}
 
     return render_template(
-        "swimmers/list.html",
+        "swimmers/main.html",
         female_swimmers=female_swimmers,
         male_swimmers=male_swimmers,
         competition_options=COMPETITION_OPTIONS,

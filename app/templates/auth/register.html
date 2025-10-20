@@ -28,7 +28,8 @@
       <span class="text-slate-600">Confirm password</span>
       <input type="password" name="confirm" class="rounded border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" required>
     </label>
-    <div class="flex items-center justify-end">
+    <div class="flex items-center justify-between">
+      <a class="text-sm text-indigo-600 hover:underline" href="{{ url_for('auth.login') }}">Back to login</a>
       <button type="submit" class="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Create account</button>
     </div>
   </form>
