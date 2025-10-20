@@ -24,8 +24,9 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
     if config:
         app.config.from_mapping(config)
 
-    # Production safety guard: require a strong SECRET_KEY in non-debug
-    if not app.debug:
+    # Production safety guard: require a strong SECRET_KEY when not running via Flask CLI
+    run_from_cli = os.environ.get("FLASK_RUN_FROM_CLI", "").lower() == "true"
+    if not app.debug and not run_from_cli:
         secret = app.config.get("SECRET_KEY")
         if not secret or secret == "dev-secret":
             raise RuntimeError("SECRET_KEY must be set to a strong value in production.")

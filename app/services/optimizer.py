@@ -58,11 +58,11 @@ def compute_best_lineup(
       Pass 1: maximize total points.
       Pass 2: with points fixed, maximize # of distinct swimmers used.
       Pass 3: with (points, #used) fixed, minimize maximum total races per swimmer.
-      Pass 4: with (points, #used, minimax) fixed, improve smoothness per segment:
-              priority A) avoid adjacency (gap=0),
-              priority B) avoid gap=1 pairs (one-break),
-              priority C) minimize max per-segment load.
-
+      Pass 4: with (points, #used, minimax) fixed, improve temporal smoothness per segment:
+              A) avoid adjacency (gap=0),
+              B) avoid gap=1 pairs (one-break),
+              C) minimize max per-segment load,
+              D) (only if 4 segments = 2 days) minimize max per-swimmer day imbalance.
     Returns:
         assignment: List[(slot, seg_idx, event, swimmer, pts)]
     """
@@ -211,7 +211,7 @@ def compute_best_lineup(
         raise RuntimeError("Third pass failed")
     min_max_total = int(round(Mtot.solution_value()))
 
-    # ---- PASS 4: spacing within segments (adjacency > one-break > per-seg max) ----
+    # ---- PASS 4: spacing (adjacency > one-break > per-seg max [> per-day balance if 4 segs]) ----
     solver4 = pywraplp.Solver.CreateSolver("CBC")
     if not solver4:
         raise RuntimeError("OR-Tools CBC solver not available (pass 4)")
@@ -292,15 +292,49 @@ def compute_best_lineup(
     for (s, g), ysg in y_seg.items():
         solver4.Add(ysg <= Mseg)
 
-    # Weights to enforce lexicographic priority: W0 (adjacency) > W1 (gap1) > Mseg
+    # D) (only if 4 segments) per-day balance: minimize max per-swimmer day imbalance
+    has_two_days = (len(segments) == 4)
+    if has_two_days:
+        # Day 1: segments 0 & 1, Day 2: segments 2 & 3
+        day1_slots = segment_slot_indices[0] + segment_slot_indices[1]
+        day2_slots = segment_slot_indices[2] + segment_slot_indices[3]
+
+        d1 = {s: solver4.IntVar(0, len(day1_slots), f"d1_{s}") for s in swimmers}
+        d2 = {s: solver4.IntVar(0, len(day2_slots), f"d2_{s}") for s in swimmers}
+        for s in swimmers:
+            solver4.Add(d1[s] == solver4.Sum(x4[(s, t)] for t in day1_slots))
+            solver4.Add(d2[s] == solver4.Sum(x4[(s, t)] for t in day2_slots))
+
+        # delta_s >= |d1 - d2|
+        delta = {s: solver4.IntVar(0, min_max_total, f"ddiff_{s}") for s in swimmers}
+        for s in swimmers:
+            solver4.Add(delta[s] >= d1[s] - d2[s])
+            solver4.Add(delta[s] >= d2[s] - d1[s])
+
+        # D = max_s delta_s
+        D = solver4.IntVar(0, min_max_total, "D_day_imbalance")
+        for s in swimmers:
+            solver4.Add(delta[s] <= D)
+    else:
+        D = None  # not used
+
+    # ---- Lexicographic weights ----
+    # Upper bounds
     UB_adj = sum(max(0, N - 1) for N in seg_lengths) * S
     UB_gap1 = sum(max(0, N - 2) * 2 for N in seg_lengths) * S
-    base_M = Nmax if Nmax > 0 else 1
+    UB_Mseg = Nmax if Nmax > 0 else 1
+    UB_D = min_max_total if has_two_days else 0
 
-    W1 = base_M + 1                     # gap1 dominates Mseg
-    W0 = UB_gap1 * W1 + base_M + 1      # adjacency dominates (gap1 + Mseg)
-
-    solver4.Minimize(W0 * V_adj + W1 * V_gap1 + Mseg)
+    if has_two_days:
+        # Ensure: W0 >> (W1, W2, D), W1 >> (W2, D), W2 >> D
+        W2 = UB_D + 1
+        W1 = UB_Mseg * W2 + UB_D + 1
+        W0 = UB_gap1 * W1 + UB_Mseg * W2 + UB_D + 1
+        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + W2 * Mseg + D)
+    else:
+        W1 = UB_Mseg + 1
+        W0 = UB_gap1 * W1 + UB_Mseg + 1
+        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + Mseg)
 
     if solver4.Solve() != pywraplp.Solver.OPTIMAL:
         raise RuntimeError("Fourth pass failed")

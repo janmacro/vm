@@ -1,4 +1,4 @@
-# Vereinsmeisterschaft
+# Vereinsmeisterschaft Optimizer
 
 Small Flask app to generate optimal lineups for the
 [Schweizer Vereinsmeisterschaft](https://www.swiss-aquatics.ch/leistungssport/swimming/nationale-meisterschaften/schweizer-vereinsmeisterschaft-nla-nlb/).
@@ -6,16 +6,16 @@ Small Flask app to generate optimal lineups for the
 ## Quick Start (Docker)
 1. Build the image:
    
-   docker build -t vm .
+   docker build -t vm_optimizer .
 
 2. Run with a persistent volume and a strong secret key:
    
    docker run -d \
-     --name vm \
+     --name vm_optimizer \
      -e SECRET_KEY='change-me-to-a-random-string' \
      -v vm_data:/app/instance \
      -p 8000:8000 \
-     vm
+     vm_optimizer
 
 The container automatically runs a database init on startup.
 Visit http://localhost:8000 and register a new account.
