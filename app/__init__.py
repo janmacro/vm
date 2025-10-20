@@ -71,14 +71,9 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
         return {"csrf_token": generate_csrf}
 
     # --- Blueprint registration ---
-    from .routes import swimmers, optimize, auth
+    from .routes import swimmers, auth
 
     app.register_blueprint(swimmers.bp)
-    app.register_blueprint(optimize.bp)
     app.register_blueprint(auth.bp)
-
-    @app.get("/")
-    def index():
-        return redirect(url_for("swimmers.index"))
 
     return app

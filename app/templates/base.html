@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title or "Vereinsmeisterschaft Optimizer" }}</title>
+  <title>{{ title or "VM Optimizer" }}</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script
@@ -16,22 +16,9 @@
 <body class="min-h-screen bg-slate-100 text-slate-900">
   <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
     <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <h1 class="text-3xl font-semibold">🏊 Vereinsmeisterschaft</h1>
+      <h1 class="text-3xl font-semibold">🏊 VM Optimizer</h1>
       <nav class="flex items-center gap-2 text-sm font-medium text-slate-600">
         {% set current_endpoint = request.endpoint or '' %}
-        <a
-          class="rounded px-3 py-1 hover:bg-slate-200 {% if current_endpoint.startswith('swimmers.') %}bg-slate-200 text-slate-900{% endif %}"
-          href="{{ url_for('swimmers.index') }}"
-        >
-          Swimmers
-        </a>
-        <a
-          class="rounded px-3 py-1 hover:bg-slate-200 {% if current_endpoint.startswith('optimize.') %}bg-slate-200 text-slate-900{% endif %}"
-          href="{{ url_for('optimize.index') }}"
-        >
-          Optimizer
-        </a>
-        <span class="mx-2 text-slate-300">|</span>
         {% if current_user.is_authenticated %}
           <span class="px-2 text-slate-500">{{ current_user.email }}</span>
           <a

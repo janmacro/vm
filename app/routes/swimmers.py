@@ -11,14 +11,18 @@ from flask import (
     url_for,
 )
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from flask_login import login_required, current_user
 
 from ..db import db
 from ..models import Event, PB, Swimmer
+from ..services import optimizer
 from ..services import swimrankings
 import re
 
-bp = Blueprint("swimmers", __name__, url_prefix="/swimmers")
+bp = Blueprint("swimmers", __name__, url_prefix="")
+
+COMPETITION_OPTIONS: list[str] = ["Allgemeine Kategorie", "Nachwuchs"]
 
 
 def _is_htmx(req: Any) -> bool:
@@ -126,7 +130,7 @@ def _build_form_from_swimmer(swimmer: Swimmer, events: list[Event]) -> Dict[str,
     return rows
 
 
-@bp.get("/")
+@bp.route("/", methods=["GET", "POST"])
 @login_required
 def index() -> str:
     """List swimmers grouped by gender."""
@@ -142,10 +146,120 @@ def index() -> str:
     )
     female_swimmers = db.session.scalars(female_stmt).all()
     male_swimmers = db.session.scalars(male_stmt).all()
+    selected_gender = request.form.get("gender", "f")
+    competition = request.form.get("competition", COMPETITION_OPTIONS[0])
+    enforce_rest = True if request.method == "GET" else bool(request.form.get("enforce_rest"))
+    ran = request.method == "POST"
+
+    errors: list[str] = []
+    solution: dict | None = None
+
+    try:
+        segments = optimizer.get_segments(selected_gender, competition)
+    except ValueError as exc:
+        errors.append(str(exc))
+        segments = []
+
+    swimmers_for_gender: list[Swimmer] = []
+    if ran and not errors:
+        stmt = (
+            select(Swimmer)
+            .options(selectinload(Swimmer.pbs))
+            .where(Swimmer.gender == selected_gender, Swimmer.active.is_(True), Swimmer.owner_id == current_user.id)
+        )
+        swimmers_for_gender = list(db.session.scalars(stmt))
+        if not swimmers_for_gender:
+            errors.append("No active swimmers available for the selected roster.")
+
+    if ran and not errors:
+        from collections import Counter
+        occurrences = Counter(ev for segment in segments for ev in segment)
+        availability: dict[Event, set[int]] = {event: set() for event in occurrences}
+        for sw in swimmers_for_gender:
+            for pb in sw.pbs:
+                if pb.event in availability and pb.points:
+                    availability[pb.event].add(sw.id)
+        missing = [
+            f"{event.value} (need {required}, have {len(availability[event])})"
+            for event, required in occurrences.items()
+            if len(availability[event]) < required
+        ]
+        if missing:
+            errors.append(
+                f"Not enough swimmers with a personal best for: {', '.join(missing)}"
+            )
+
+    if ran and not errors:
+        total_slots = sum(len(seg) for seg in segments)
+        max_races = optimizer.get_max_races_per_swimmer(competition)
+        if max_races * len(swimmers_for_gender) < total_slots:
+            errors.append(
+                "Roster too small for this competition: with each swimmer limited to "
+                f"{max_races} races, you need {total_slots} starts but only have "
+                f"{len(swimmers_for_gender)} active swimmers."
+            )
+
+    if ran and not errors:
+        swimmer_ids = [sw.id for sw in swimmers_for_gender]
+        points = {
+            (sw.id, pb.event): pb.points
+            for sw in swimmers_for_gender
+            for pb in sw.pbs
+            if pb.points
+        }
+        try:
+            lineup = optimizer.compute_best_lineup(
+                swimmers=swimmer_ids,
+                points=points,
+                segments=segments,
+                max_races_per_swimmer=max_races,
+                enforce_adjacent_rest=enforce_rest,
+            )
+        except (ValueError, RuntimeError) as exc:
+            errors.append(f"Optimization failed: {exc}")
+        else:
+            # format solution similar to optimize._format_solution
+            segment_offsets = []
+            running = 0
+            for seg in segments:
+                segment_offsets.append(running)
+                running += len(seg)
+            total_points = int(sum(item[4] for item in lineup))
+            segment_rows: list[dict] = []
+            lookup = {sw.id: sw for sw in swimmers_for_gender}
+            for seg_idx, seg_events in enumerate(segments):
+                rows = []
+                for slot, assigned_seg_idx, event, swimmer_id, pts in lineup:
+                    if assigned_seg_idx != seg_idx:
+                        continue
+                    local_slot = slot - segment_offsets[seg_idx] + 1
+                    rows.append({
+                        "slot": local_slot,
+                        "event": event.value,
+                        "swimmer": lookup.get(swimmer_id).name if swimmer_id in lookup else "—",
+                        "points": pts,
+                    })
+                rows.sort(key=lambda item: item["slot"])
+                if competition == "Allgemeine Kategorie":
+                    day = seg_idx // 2 + 1
+                    seg_label = seg_idx % 2 + 1
+                    label = f"Day {day}, Segment {seg_label}"
+                else:
+                    label = f"Segment {seg_idx + 1}"
+                segment_rows.append({"label": label, "entries": rows})
+            solution = {"total_points": total_points, "segments": segment_rows}
+
     return render_template(
         "swimmers/list.html",
         female_swimmers=female_swimmers,
         male_swimmers=male_swimmers,
+        competition_options=COMPETITION_OPTIONS,
+        selected_gender=selected_gender,
+        selected_competition=competition,
+        enforce_rest=enforce_rest,
+        errors=errors,
+        solution=solution,
+        ran=ran,
     )
 
 
