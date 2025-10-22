@@ -36,7 +36,7 @@
         type="text"
         name="name"
         value="{{ form_name }}"
-        class="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        class="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         placeholder="{{ 'Katie Ledecky' if swimmer.gender == 'f' else 'Michael Phelps' }}"
       >
     </fieldset>
@@ -50,7 +50,7 @@
           type="text"
           name="swimrankings_identifier"
           value="{{ swimrankings_identifier }}"
-          class="flex-1 rounded border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          class="flex-1 rounded border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           placeholder="https://www.swimrankings.net/index.php?page=athleteDetail&athleteId=..."
         >
         <select
