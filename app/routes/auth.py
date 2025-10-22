@@ -23,14 +23,14 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for("swimmers.index"))
 
-    email = request.form.get("email", "").strip()
+    username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
     errors: List[str] = []
 
     if request.method == "POST":
-        if not email:
-            errors.append("Email is required.")
+        if not username:
+            errors.append("Username is required.")
         if not password:
             errors.append("Password is required.")
         if password and len(password) < 8:
@@ -39,17 +39,17 @@ def register():
             errors.append("Passwords do not match.")
 
         if not errors:
-            existing = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
+            existing = db.session.execute(select(User).filter_by(username=username)).scalar_one_or_none()
             if existing:
-                errors.append("An account with this email already exists.")
+                errors.append("An account with this username already exists.")
             else:
-                user = User(email=email, password_hash=generate_password_hash(password))
+                user = User(username=username, password_hash=generate_password_hash(password))
                 db.session.add(user)
                 db.session.commit()
                 login_user(user)
                 return redirect(url_for("swimmers.index"))
 
-    return render_template("auth/register.html", email=email, errors=errors)
+    return render_template("auth/register.html", username=username, errors=errors)
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -58,15 +58,15 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("swimmers.index"))
 
-    email = request.form.get("email", "").strip()
+    username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     errors: List[str] = []
 
     if request.method == "POST":
-        if not email or not password:
-            errors.append("Email and password are required.")
+        if not username or not password:
+            errors.append("Username and password are required.")
         else:
-            user = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
+            user = db.session.execute(select(User).filter_by(username=username)).scalar_one_or_none()
             if not user or not check_password_hash(user.password_hash, password):
                 errors.append("Invalid email or password.")
             else:
@@ -74,7 +74,7 @@ def login():
                 next_url = request.args.get("next")
                 return redirect(next_url or url_for("swimmers.index"))
 
-    return render_template("auth/login.html", email=email, errors=errors)
+    return render_template("auth/login.html", username=username, errors=errors)
 
 
 @bp.route("/logout")

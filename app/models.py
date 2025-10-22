@@ -92,7 +92,7 @@ class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(db.String(255), nullable=False, unique=True, index=True)
+    username: Mapped[str] = mapped_column(db.String(80), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(db.String(255), nullable=False)
 
     swimmers: Mapped[List[Swimmer]] = relationship(
@@ -102,4 +102,4 @@ class User(UserMixin, db.Model):
     )
 
     def __repr__(self) -> str:
-        return f"<User id={self.id} email={self.email!r}>"
+        return f"<User id={self.id} username={self.username!r}>"
