@@ -82,3 +82,50 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
+
+
+@bp.route("/account", methods=["GET"])
+@login_required
+def account():
+    return render_template("auth/account.html", errors=[], messages=[])
+
+
+@bp.post("/account/password")
+@login_required
+@limiter.limit("5/minute")
+def change_password():
+    errors: List[str] = []
+    messages: List[str] = []
+
+    current = request.form.get("current_password", "")
+    new = request.form.get("new_password", "")
+    confirm = request.form.get("confirm_password", "")
+
+    if not current or not new or not confirm:
+        errors.append("All password fields are required.")
+    elif not check_password_hash(current_user.password_hash, current):
+        errors.append("Current password is incorrect.")
+    elif len(new) < 8:
+        errors.append("New password must be at least 8 characters.")
+    elif new != confirm:
+        errors.append("New passwords do not match.")
+
+    if not errors:
+        current_user.password_hash = generate_password_hash(new)
+        db.session.commit()
+        messages.append("Password updated.")
+
+    return render_template("auth/account.html", errors=errors, messages=messages)
+
+
+@bp.post("/account/delete")
+@login_required
+# @limiter.limit("3/hour")
+def delete_account():
+    # Delete user and cascade to swimmers/PBs via FK ondelete=CASCADE
+    user = db.session.get(User, current_user.id)
+    logout_user()
+    if user is not None:
+        db.session.delete(user)
+        db.session.commit()
+    return redirect(url_for("auth.login"))

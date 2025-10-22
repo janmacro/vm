@@ -15,21 +15,36 @@
 </head>
 <body class="min-h-screen bg-slate-100 text-slate-900">
   <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
-    <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <h1 class="text-3xl font-semibold">🏊 VM Optimizer</h1>
-      <nav class="flex items-center gap-2 text-sm font-medium text-slate-600">
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-3xl font-semibold">
+        <a href="{{ url_for('swimmers.index') }}" class="no-underline cursor-pointer">🏊 VM Optimizer</a>
+      </h1>
+      <nav class="flex items-center gap-3 text-sm font-medium text-slate-600">
         {% set current_endpoint = request.endpoint or '' %}
         {% if current_user.is_authenticated %}
-          <span class="px-2 text-slate-500">{{ current_user.email }}</span>
           <a
-            class="rounded px-3 py-1 hover:bg-slate-200"
-            href="{{ url_for('auth.logout') }}"
+            href="{{ url_for('auth.account') }}"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"
+            title="Account"
+            aria-label="Account"
           >
-            Logout
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
+              <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Zm0 2c-3.866 0-7 3.134-7 7h2a5 5 0 0 1 10 0h2c0-3.866-3.134-7-7-7Z"/>
+            </svg>
+          </a>
+          <a
+            class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-slate-200 text-slate-600"
+            href="{{ url_for('auth.logout') }}"
+            title="Logout"
+            aria-label="Logout"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
+              <path d="M10 3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-2h2v1h6V4h-6v1h-2V3Zm-1.293 6.293 1.414 1.414L8.828 12H16v2H8.828l1.293 1.293-1.414 1.414L5 13.414l3.707-3.707Z"/>
+            </svg>
           </a>
         {% endif %}
       </nav>
-    </header>
+    </div>
     <main hx-boost="true">
       {% block content %}{% endblock %}
     </main>
