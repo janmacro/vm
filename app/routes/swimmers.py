@@ -19,6 +19,7 @@ from ..models import Event, PB, Swimmer
 from ..services import optimizer
 from ..services import swimrankings
 import re
+import random
 
 bp = Blueprint("swimmers", __name__, url_prefix="")
 
@@ -201,6 +202,7 @@ def index() -> str:
 
     if ran and not errors:
         swimmer_ids = [sw.id for sw in swimmers_for_gender]
+        random.shuffle(swimmer_ids)
         points = {
             (sw.id, pb.event): pb.points
             for sw in swimmers_for_gender

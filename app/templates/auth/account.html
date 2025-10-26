@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="mx-auto max-w-lg space-y-6">
+<div class="mx-auto max-w-lg space-y-6">
     {% if errors %}
     <div class="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       <ul class="list-disc pl-5">
@@ -46,11 +46,11 @@
 
   <div class="rounded-lg border border-red-200 bg-red-50 p-6 shadow-sm">
     <h2 class="mb-3 text-base font-semibold text-red-700">Danger zone</h2>
-    <p class="mb-4 text-sm text-red-700">Deleting your account will remove all your swimmers and their personal bests. This action cannot be undone.</p>
+    <p class="mb-4 text-sm text-red-700">This action cannot be undone.</p>
     <form method="post" action="{{ url_for('auth.delete_account') }}" class="flex items-center gap-3" hx-boost="false" onsubmit="return confirm('Are you sure you want to delete your account? This cannot be undone.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Delete account</button>
     </form>
   </div>
-</section>
+</div>
 {% endblock %}

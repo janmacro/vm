@@ -117,7 +117,7 @@ def compute_best_lineup(
                 for s in swimmers:
                     solver1.Add(x1[(s, slot)] + x1[(s, slot + 1)] <= 1)
 
-    total_points1 = solver1.Sum(points.get((s, ev), 0.0) * x1[(s, slot)]
+    total_points1 = solver1.Sum(points.get((s, ev), 0) * x1[(s, slot)]
                                 for s in swimmers for (slot, _, ev) in slots)
     solver1.Maximize(total_points1)
     if solver1.Solve() != pywraplp.Solver.OPTIMAL:
@@ -148,7 +148,7 @@ def compute_best_lineup(
                 for s in swimmers:
                     solver2.Add(x2[(s, slot)] + x2[(s, slot + 1)] <= 1)
 
-    tot2 = solver2.Sum(points.get((s, ev), 0.0) * x2[(s, slot)]
+    tot2 = solver2.Sum(points.get((s, ev), 0) * x2[(s, slot)]
                        for s in swimmers for (slot, _, ev) in slots)
     solver2.Add(tot2 == best_points)
 
@@ -187,24 +187,20 @@ def compute_best_lineup(
                 for s in swimmers:
                     solver3.Add(x3[(s, slot)] + x3[(s, slot + 1)] <= 1)
 
-    tot3 = solver3.Sum(points.get((s, ev), 0.0) * x3[(s, slot)]
+    tot3 = solver3.Sum(points.get((s, ev), 0) * x3[(s, slot)]
                        for s in swimmers for (slot, _, ev) in slots)
     solver3.Add(tot3 == best_points)
 
     used3 = {s: solver3.BoolVar(f"used3_s{s}") for s in swimmers}
     for s in swimmers:
-        y = solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots)
-        solver3.Add(y <= BIG * used3[s])
-        solver3.Add(y >= used3[s])
+        races_s = solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots)
+        solver3.Add(races_s <= BIG * used3[s])
+        solver3.Add(races_s >= used3[s])
     solver3.Add(solver3.Sum(used3[s] for s in swimmers) == max_used)
-
-    y3 = {s: solver3.IntVar(0, max_races_per_swimmer, f"y3_s{s}") for s in swimmers}
-    for s in swimmers:
-        solver3.Add(y3[s] == solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots))
 
     Mtot = solver3.IntVar(0, max_races_per_swimmer, "Mtot")
     for s in swimmers:
-        solver3.Add(y3[s] <= Mtot)
+        solver3.Add(solver3.Sum(x3[(s, slot)] for (slot, _, _) in slots) <= Mtot)
 
     solver3.Minimize(Mtot)
     if solver3.Solve() != pywraplp.Solver.OPTIMAL:
@@ -219,7 +215,6 @@ def compute_best_lineup(
     x4 = {(s, slot): solver4.BoolVar(f"x4_s{s}_{slot}")
           for s in swimmers for (slot, _, _) in slots}
 
-    # hard constraints
     for (slot, _, _) in slots:
         solver4.Add(solver4.Sum(x4[(s, slot)] for s in swimmers) == 1)
     for s in swimmers:
@@ -237,16 +232,16 @@ def compute_best_lineup(
                     solver4.Add(x4[(s, slot)] + x4[(s, slot + 1)] <= 1)
 
     # lock points, #used, and global minimax
-    tot4 = solver4.Sum(points.get((s, ev), 0.0) * x4[(s, slot)]
+    tot4 = solver4.Sum(points.get((s, ev), 0) * x4[(s, slot)]
                        for s in swimmers for (slot, _, ev) in slots)
     solver4.Add(tot4 == best_points)
 
     used4 = {s: solver4.BoolVar(f"used4_s{s}") for s in swimmers}
     for s in swimmers:
-        y = solver4.Sum(x4[(s, slot)] for (slot, _, _) in slots)
-        solver4.Add(y <= BIG * used4[s])
-        solver4.Add(y >= used4[s])
-        solver4.Add(y <= min_max_total)  # preserve global minimax
+        races_s = solver4.Sum(x4[(s, slot)] for (slot, _, _) in slots)
+        solver4.Add(races_s <= BIG * used4[s])
+        solver4.Add(races_s >= used4[s])
+        solver4.Add(races_s <= min_max_total)  # preserve global minimax
     solver4.Add(solver4.Sum(used4[s] for s in swimmers) == max_used)
 
     # A) adjacency (gap=0) penalties
@@ -257,27 +252,25 @@ def compute_best_lineup(
             for i in range(N - 1):
                 a = x4[(s, base + i)]
                 b = x4[(s, base + i + 1)]
-                z = solver4.BoolVar(f"adj_{s}_{g}_{i}")
-                solver4.Add(z >= a + b - 1)
-                solver4.Add(z <= a)
-                solver4.Add(z <= b)
-                z0_list.append(z)
+                z0 = solver4.BoolVar(f"adj_{s}_{g}_{i}")
+                solver4.Add(z0 >= a + b - 1)
+                solver4.Add(z0 <= a)
+                solver4.Add(z0 <= b)
+                z0_list.append(z0)
     V_adj = solver4.Sum(z0_list)
 
-    # B) one-break (gap=1) penalties via length-3 windows: excess >= count - 1
+    # B) one-break (gap=1) penalties via length-3 windows: flag = 1 iff window has >= 2 races
     z1_list = []
     for g, seg in enumerate(segments):
         base = seg_offsets[g]; N = len(seg)
         if N >= 3:
             for s in swimmers:
                 for i in range(N - 2):
-                    count = solver4.IntVar(0, 3, f"cnt3_{s}_{g}_{i}")
-                    solver4.Add(count == x4[(s, base + i)] +
-                                         x4[(s, base + i + 1)] +
-                                         x4[(s, base + i + 2)])
-                    exc = solver4.IntVar(0, 2, f"exc3_{s}_{g}_{i}")
-                    solver4.Add(exc >= count - 1)
-                    z1_list.append(exc)
+                    window_sum = solver4.Sum(x4[(s, base + i + k)] for k in range(3))
+                    z1 = solver4.BoolVar(f"gap1_{s}_{g}_{i}")
+                    solver4.Add(window_sum - 2 * z1 <= 1)
+                    solver4.Add(window_sum - 2 * z1 >= 0)
+                    z1_list.append(z1)
     V_gap1 = solver4.Sum(z1_list)
 
     # C) per-segment load balance: minimize Mseg = max_{s,g} races in segment g for swimmer s
@@ -292,7 +285,7 @@ def compute_best_lineup(
     for (s, g), ysg in y_seg.items():
         solver4.Add(ysg <= Mseg)
 
-    # D) (only if 4 segments) per-day balance: minimize max per-swimmer day imbalance
+    # D) (only if 4 segments) per-day balance: minimize max of per-swimmer day loads
     has_two_days = (len(segments) == 4)
     if has_two_days:
         # Day 1: segments 0 & 1, Day 2: segments 2 & 3
@@ -305,32 +298,26 @@ def compute_best_lineup(
             solver4.Add(d1[s] == solver4.Sum(x4[(s, t)] for t in day1_slots))
             solver4.Add(d2[s] == solver4.Sum(x4[(s, t)] for t in day2_slots))
 
-        # delta_s >= |d1 - d2|
-        delta = {s: solver4.IntVar(0, min_max_total, f"ddiff_{s}") for s in swimmers}
+        Mday = solver4.IntVar(0, min_max_total, "Mday")
         for s in swimmers:
-            solver4.Add(delta[s] >= d1[s] - d2[s])
-            solver4.Add(delta[s] >= d2[s] - d1[s])
-
-        # D = max_s delta_s
-        D = solver4.IntVar(0, min_max_total, "D_day_imbalance")
-        for s in swimmers:
-            solver4.Add(delta[s] <= D)
+            solver4.Add(d1[s] <= Mday)
+            solver4.Add(d2[s] <= Mday)
     else:
-        D = None  # not used
+        Mday = None  # not used
 
     # ---- Lexicographic weights ----
     # Upper bounds
     UB_adj = sum(max(0, N - 1) for N in seg_lengths) * S
-    UB_gap1 = sum(max(0, N - 2) * 2 for N in seg_lengths) * S
+    UB_gap1 = sum(max(0, N - 2) for N in seg_lengths) * S
     UB_Mseg = Nmax if Nmax > 0 else 1
-    UB_D = min_max_total if has_two_days else 0
+    UB_Mday = min_max_total if has_two_days else 0
 
     if has_two_days:
         # Ensure: W0 >> (W1, W2, D), W1 >> (W2, D), W2 >> D
-        W2 = UB_D + 1
-        W1 = UB_Mseg * W2 + UB_D + 1
-        W0 = UB_gap1 * W1 + UB_Mseg * W2 + UB_D + 1
-        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + W2 * Mseg + D)
+        W2 = UB_Mday + 1
+        W1 = UB_Mseg * W2 + UB_Mday + 1
+        W0 = UB_gap1 * W1 + UB_Mseg * W2 + UB_Mday + 1
+        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + W2 * Mseg + Mday)
     else:
         W1 = UB_Mseg + 1
         W0 = UB_gap1 * W1 + UB_Mseg + 1
@@ -347,7 +334,7 @@ def compute_best_lineup(
             if x4[(s, slot)].solution_value() > 0.5:
                 chosen = s
                 break
-        pts = points.get((chosen, ev), 0.0) if chosen is not None else 0.0
+        pts = points.get((chosen, ev), 0) if chosen is not None else 0
         assignment.append((slot, seg_idx, ev, chosen, pts))
 
     return assignment

@@ -18,7 +18,7 @@
       <h1 class="text-3xl font-semibold">
         <a href="{{ url_for('swimmers.index') }}" class="no-underline cursor-pointer">🏊 VM Optimizer</a>
       </h1>
-      <nav class="flex items-center gap-3 text-sm font-medium text-slate-600">
+      <div class="flex items-center gap-3 text-sm font-medium text-slate-600">
         {% set current_endpoint = request.endpoint or '' %}
         {% if current_user.is_authenticated %}
           <a
@@ -42,7 +42,7 @@
             </svg>
           </a>
         {% endif %}
-      </nav>
+      </div>
     </div>
     <main hx-boost="true">
       {% block content %}{% endblock %}

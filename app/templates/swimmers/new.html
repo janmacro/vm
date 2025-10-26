@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="flex flex-col gap-6">
+<div class="flex flex-col gap-6">
   <div class="flex items-center justify-between">
     <h2 class="text-2xl font-semibold text-slate-800">Add swimmer <span class="text-base font-medium text-slate-500">({{ gender_label }})</span></h2>
     <a class="text-sm font-medium text-indigo-600 hover:underline" href="{{ url_for('swimmers.index') }}">Back to roster</a>
@@ -105,5 +105,5 @@
       </button>
     </div>
   </form>
-</section>
+</div>
 {% endblock %}

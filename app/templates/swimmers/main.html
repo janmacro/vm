@@ -96,7 +96,7 @@
     </p>
   </div>
 
-  <form method="post" class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+  <form id="optimizer-form" method="post" class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm" hx-boost="false">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grid gap-4 md:grid-cols-2">
       <fieldset class="flex flex-col gap-3">
@@ -209,4 +209,29 @@
     </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var form = document.getElementById('optimizer-form');
+    if (form) {
+      form.addEventListener('submit', function () {
+        try { sessionStorage.setItem('scrollY', String(window.scrollY || window.pageYOffset || 0)); } catch (e) {}
+      });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        var y = sessionStorage.getItem('scrollY');
+        if (y !== null) {
+          sessionStorage.removeItem('scrollY');
+          var top = parseInt(y, 10);
+          if (!isNaN(top)) {
+            window.scrollTo({ top: top, left: 0, behavior: 'auto' });
+          }
+        }
+      } catch (e) {}
+    });
+  })();
+</script>
 {% endblock %}
