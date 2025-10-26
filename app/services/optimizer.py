@@ -285,7 +285,7 @@ def compute_best_lineup(
     for (s, g), ysg in y_seg.items():
         solver4.Add(ysg <= Mseg)
 
-    # D) (only if 4 segments) per-day balance: minimize max of per-swimmer day loads
+    # D) (only if 4 segments) per-day balance: minimize max per-swimmer day imbalance
     has_two_days = (len(segments) == 4)
     if has_two_days:
         # Day 1: segments 0 & 1, Day 2: segments 2 & 3
@@ -298,26 +298,32 @@ def compute_best_lineup(
             solver4.Add(d1[s] == solver4.Sum(x4[(s, t)] for t in day1_slots))
             solver4.Add(d2[s] == solver4.Sum(x4[(s, t)] for t in day2_slots))
 
-        Mday = solver4.IntVar(0, min_max_total, "Mday")
+        # delta_s >= |d1[s] - d2[s]|
+        delta = {s: solver4.IntVar(0, min_max_total, f"ddiff_{s}") for s in swimmers}
         for s in swimmers:
-            solver4.Add(d1[s] <= Mday)
-            solver4.Add(d2[s] <= Mday)
+            solver4.Add(delta[s] >= d1[s] - d2[s])
+            solver4.Add(delta[s] >= d2[s] - d1[s])
+
+        # D = max_s delta_s
+        D = solver4.IntVar(0, min_max_total, "D_day_imbalance")
+        for s in swimmers:
+            solver4.Add(delta[s] <= D)
     else:
-        Mday = None  # not used
+        D = None  # not used
 
     # ---- Lexicographic weights ----
     # Upper bounds
     UB_adj = sum(max(0, N - 1) for N in seg_lengths) * S
     UB_gap1 = sum(max(0, N - 2) for N in seg_lengths) * S
     UB_Mseg = Nmax if Nmax > 0 else 1
-    UB_Mday = min_max_total if has_two_days else 0
+    UB_D = min_max_total if has_two_days else 0
 
     if has_two_days:
         # Ensure: W0 >> (W1, W2, D), W1 >> (W2, D), W2 >> D
-        W2 = UB_Mday + 1
-        W1 = UB_Mseg * W2 + UB_Mday + 1
-        W0 = UB_gap1 * W1 + UB_Mseg * W2 + UB_Mday + 1
-        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + W2 * Mseg + Mday)
+        W2 = UB_D + 1
+        W1 = UB_Mseg * W2 + UB_D + 1
+        W0 = UB_gap1 * W1 + UB_Mseg * W2 + UB_D + 1
+        solver4.Minimize(W0 * V_adj + W1 * V_gap1 + W2 * Mseg + D)
     else:
         W1 = UB_Mseg + 1
         W0 = UB_gap1 * W1 + UB_Mseg + 1
