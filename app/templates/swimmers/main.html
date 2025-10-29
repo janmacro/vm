@@ -11,7 +11,7 @@
   </div>
 
   <div class="grid gap-6 md:grid-cols-2">
-    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <h3 class="text-base font-semibold text-slate-800">Women</h3>
         <span class="text-sm font-medium tracking-wide text-slate-400">{{ female_swimmers|length }} total</span>
@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <h3 class="text-base font-semibold text-slate-800">Men</h3>
         <span class="text-sm font-medium tracking-wide text-slate-400">{{ male_swimmers|length }} total</span>
@@ -172,7 +172,7 @@
   {% endif %}
 
   {% if solution %}
-    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div class="flex flex-col gap-1 border-b border-slate-200 px-4 py-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-lg font-semibold text-slate-800">Optimized Lineup</h3>
@@ -181,28 +181,30 @@
       </div>
       <div class="flex flex-col gap-4 p-4">
         {% for segment in solution.segments %}
-          <div class="rounded border border-slate-100 bg-slate-50 p-3">
+          <div class="rounded border border-slate-100 bg-slate-50 p-3 overflow-hidden">
             <h4 class="text-sm font-semibold text-slate-700">{{ segment.label }}</h4>
-            <table class="mt-2 w-full table-fixed text-sm">
-              <thead class="text-sm tracking-wide text-slate-500">
-                <tr>
-                  <th class="w-16 text-left">Slot</th>
-                  <th class="w-48 text-left">Event</th>
-                  <th class="text-left">Swimmer</th>
-                  <th class="w-24 text-right">Points</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200">
-                {% for entry in segment.entries %}
+            <div class="overflow-x-auto">
+              <table class="mt-2 min-w-full table-fixed text-sm">
+                <thead class="text-sm tracking-wide text-slate-500">
                   <tr>
-                    <td class="py-1 text-left">{{ entry.slot }}</td>
-                    <td class="py-1 text-left">{{ entry.event }}</td>
-                    <td class="py-1 text-left">{{ entry.swimmer }}</td>
-                    <td class="py-1 text-right">{{ entry.points|int }}</td>
+                    <th class="w-16 text-left">Slot</th>
+                    <th class="w-48 text-left">Event</th>
+                    <th class="text-left">Swimmer</th>
+                    <th class="w-24 text-right">Points</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  {% for entry in segment.entries %}
+                    <tr>
+                      <td class="py-1 text-left">{{ entry.slot }}</td>
+                      <td class="py-1 text-left">{{ entry.event }}</td>
+                      <td class="py-1 text-left">{{ entry.swimmer }}</td>
+                      <td class="py-1 text-right">{{ entry.points|int }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           </div>
         {% endfor %}
       </div>
