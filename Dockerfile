@@ -24,4 +24,4 @@ USER appuser
 EXPOSE 8000
 
 # Always run DB init before starting Gunicorn
-CMD ["sh", "-c", "flask --app app init-db && exec gunicorn -w 2 -k gthread -b 0.0.0.0:8000 'app:create_app()'"]
+CMD ["sh", "-c", "flask --app app:create_app init-db && exec gunicorn -w 2 -k gthread --forwarded-allow-ips='*' -b 0.0.0.0:8000 'app:create_app()'"]

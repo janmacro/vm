@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from flask import Flask, redirect, url_for, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 
@@ -69,6 +70,9 @@ def create_app(config: Mapping[str, Any] | None = None) -> Flask:
     def inject_csrf_token():
         # Expose a callable csrf_token() for templates
         return {"csrf_token": generate_csrf}
+
+    # Trust reverse proxy headers (X-Forwarded-*) from a single proxy
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
     @login_manager.unauthorized_handler
     def _unauthorized():
